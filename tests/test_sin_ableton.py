@@ -227,6 +227,26 @@ async def main():
         song.current_song_time += 0.5
     assert not any(r for t, r, _ in rec if t < 8) and (10.0, True, 0.4) in rec, rec  # preroll sin grabar, rampa a mitad
     assert not song.record_mode and vol.value == 0.8 and song.tracks[1].arm and surface._rec is None
+    # grabar el master por Resampling en una pista nueva; al acabar se desarma y se para
+    def new_audio(i):
+        t = track("x"); t.can_be_armed, t.arm = True, False
+        t.available_input_routing_types = [Obj(display_name="Ext. In"), Obj(display_name="Resampling")]
+        song.tracks.append(t)
+    song.create_audio_track, song.stop_playing = new_audio, lambda: setattr(song, "is_playing", False)
+    song.current_song_time, song.is_playing = 100.0, False
+    rm = await server.ableton_record_master(from_bar=3, bars=1)
+    mt = song.tracks[rm["index"]]
+    assert (rm["track"], mt.input_routing_type.display_name, mt.arm, song.tracks[1].arm) == \
+        ("Master Rec", "Resampling", True, False), rm
+    queued.reverse()
+    seen = []
+    while queued:
+        queued.pop(0)()
+        seen.append((song.current_song_time, song.record_mode))
+        song.current_song_time += 0.5
+    assert not any(r for t, r in seen if t < 8) and (10.0, True) in seen, seen
+    assert not song.record_mode and not mt.arm and song.tracks[1].arm and not song.is_playing and surface._rec is None
+    song.tracks.pop()
     surface.schedule_message = lambda d, fn: fn()
     assert (await server.ableton_arrange_clear(track=0, from_bar=9))["deleted"] == 1
     assert (await server.ableton_arrange_clear(track=0))["deleted"] == 1

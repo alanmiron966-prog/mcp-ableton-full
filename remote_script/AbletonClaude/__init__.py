@@ -420,7 +420,8 @@ class AbletonClaude(ControlSurface):
 
     def cmd_arrange_list(self, track):
         t = self._track(track)
-        return [{"name": c.name, "start": c.start_time, "end": c.end_time} for c in t.arrangement_clips]
+        return [{"name": c.name, "start": c.start_time, "end": c.end_time,
+                 **({"file": c.file_path} if getattr(c, "is_audio_clip", False) else {})} for c in t.arrangement_clips]
 
     def cmd_arrange_clear(self, track, start=None, end=None):
         t = self._track(track)
@@ -531,18 +532,30 @@ class AbletonClaude(ControlSurface):
         self._rec = {"armed": armed, "auto_arm": s.session_automation_record}
         s.session_automation_record = True  # boton Automation Arm: sin el no se graba automatizacion
         s.re_enable_automation()  # si el parametro esta en override, Live no graba encima
+
+        def finish():
+            s.re_enable_automation()  # mover el parametro sin grabar lo deja en override
+            self._end_rec()
+
+        secs = self._roll(start, end, lambda t: setattr(p, "value", max(p.min, min(p.max, at(t)))), finish)
+        return {"param": p.name, "automation_state": p.automation_state, "recording_seconds": secs,
+                "from": p.str_for_value(pts[0][1]), "to": p.str_for_value(pts[-1][1])}
+
+    def _end_rec(self):
+        s = self.song()
+        s.session_automation_record = self._rec["auto_arm"]
+        for t in self._rec["armed"]:
+            t.arm = True
+        self._rec = None
+
+    def _roll(self, start, end, step, finish):
+        """Toca el Arrangement desde un compas antes de start; entre start y end activa record_mode y llama
+        step(t) en cada tick. Al acabar apaga record_mode y llama finish(). Devuelve los segundos que tarda."""
+        s = self.song()
         s.stop_all_clips()
         s.back_to_arranger = False
         s.continue_playing()
         self.schedule_message(1, lambda: setattr(s, "current_song_time", max(0.0, start - 4)))  # 1 compas de preroll
-
-        def finish():
-            s.record_mode = False
-            s.re_enable_automation()  # mover el parametro sin grabar lo deja en override
-            s.session_automation_record = self._rec["auto_arm"]
-            for t in self._rec["armed"]:
-                t.arm = True
-            self._rec = None
 
         def tick(waited=[0], rolled=[False]):
             t = s.current_song_time
@@ -550,14 +563,43 @@ class AbletonClaude(ControlSurface):
             # play y salto al preroll son asincronos: hasta ver ambos, is_playing y t son los viejos
             rolled[0] = rolled[0] or (s.is_playing and t <= start)
             if waited[0] > 6000 or (rolled[0] and (not s.is_playing or t >= end + 0.5)):  # +0.5: graba el valor final
+                s.record_mode = False
                 return finish()
             if rolled[0] and t >= start:
                 if not s.record_mode:
                     s.record_mode = True
-                p.value = max(p.min, min(p.max, at(t)))
+                step(t)
             self.schedule_message(1, tick)
 
         self.schedule_message(3, tick)
-        secs = (end - max(0.0, start - 4)) * 60.0 / s.tempo
-        return {"param": p.name, "automation_state": p.automation_state, "recording_seconds": round(secs, 1),
-                "from": p.str_for_value(pts[0][1]), "to": p.str_for_value(pts[-1][1])}
+        return round((end - max(0.0, start - 4)) * 60.0 / s.tempo, 1)
+
+    def cmd_record_master(self, start, end, name="Master Rec"):
+        """Graba la salida del master (entrada Resampling) en una pista de audio del Arrangement, en tiempo real."""
+        s = self.song()
+        start, end = float(start), float(end)
+        if getattr(self, "_rec", None):
+            raise ValueError("Ya hay una grabacion en curso")
+        t = next((x for x in s.tracks if x.name == name), None)
+        if t is None:
+            s.create_audio_track(-1)
+            t = s.tracks[len(s.tracks) - 1]
+            t.name = name
+        rs = [r for r in t.available_input_routing_types if r.display_name.lower() == "resampling"]
+        if not rs:
+            raise ValueError("Live no ofrece la entrada Resampling en '%s'" % name)
+        t.input_routing_type = rs[0]
+        t.current_monitoring_state = 2  # Off: monitorizar el master en su propia entrada lo realimenta
+        armed = [x for x in s.tracks if x.can_be_armed and x.arm]
+        for x in armed:
+            x.arm = False
+        self._rec = {"armed": armed, "auto_arm": s.session_automation_record}
+        s.session_automation_record = False  # que no se grabe automatizacion de paso
+        t.arm = True
+
+        def finish():
+            t.arm = False
+            s.stop_playing()
+            self._end_rec()
+
+        return {"track": t.name, "index": list(s.tracks).index(t), "recording_seconds": self._roll(start, end, lambda _t: None, finish)}

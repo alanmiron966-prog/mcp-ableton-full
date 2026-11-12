@@ -238,8 +238,18 @@ async def ableton_arrange_automation(track: int | str, device: str | int, param:
 
 @mcp.tool(annotations=READ)
 async def ableton_arrange_list(track: int | str) -> list:
-    """Clips del Arrangement de una pista: nombre, start y end en beats (compas = beats/4 + 1)."""
+    """Clips del Arrangement de una pista: nombre, start y end en beats (compas = beats/4 + 1); file en los de audio."""
     return await call_live("arrange_list", track=track)
+
+
+@mcp.tool(annotations=WRITE)
+async def ableton_record_master(from_bar: float, bars: float) -> dict:
+    """Graba la salida del master (con su cadena: limitador incluido) en la pista de audio 'Master Rec' del
+    Arrangement, por la entrada Resampling, sin exportar. Live graba en tiempo real: tarda recording_seconds;
+    no lances otra grabacion hasta que acabe. Despues ableton_arrange_list(index devuelto) da el
+    file del clip: pasalo a ableton_analyze_audio (LUFS, true peak) o ableton_compare_reference."""
+    start = (from_bar - 1) * 4
+    return await call_live("record_master", start=start, end=start + bars * 4)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
