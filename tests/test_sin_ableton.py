@@ -247,6 +247,16 @@ async def main():
         song.current_song_time += 0.5
     assert not any(r for t, r in seen if t < 8) and (10.0, True) in seen, seen
     assert not song.record_mode and not mt.arm and song.tracks[1].arm and not song.is_playing and surface._rec is None and song.loop and mt.mute
+    # desde el compas 1 no hay preroll: el primer tick ya ve el cabezal pasado de 0 y aun asi debe grabar y parar
+    song.current_song_time = 100.0
+    await server.ableton_record_master(from_bar=1, bars=1)
+    queued.reverse()
+    seen = []
+    while queued:
+        queued.pop(0)()
+        seen.append((song.current_song_time, song.record_mode))
+        song.current_song_time += 0.5
+    assert any(r for _, r in seen) and len(seen) < 50 and surface._rec is None, seen  # graba y para sin el limite de ticks
     song.tracks.pop()
     surface.schedule_message = lambda d, fn: fn()
     assert await server._song_end() == 64.0  # clip de los compases 9-17 en la pista 0

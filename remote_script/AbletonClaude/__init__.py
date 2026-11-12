@@ -557,13 +557,15 @@ class AbletonClaude(ControlSurface):
         loop = s.loop
         s.loop = False  # con el loop del Arrangement puesto nunca llega a end y graba encima en bucle
         s.continue_playing()
-        self.schedule_message(1, lambda: setattr(s, "current_song_time", max(0.0, start - 4)))  # 1 compas de preroll
+        pre = max(0.0, start - 4)  # 1 compas de preroll
+        self.schedule_message(1, lambda: setattr(s, "current_song_time", pre))
 
         def tick(waited=[0], rolled=[False]):
             t = s.current_song_time
             waited[0] += 1
             # play y salto al preroll son asincronos: hasta ver ambos, is_playing y t son los viejos
-            rolled[0] = rolled[0] or (s.is_playing and t <= start)
+            # desde el compas 1 no hay preroll: cuando llega el play el cabezal ya pasa de start; vale 1 compas
+            rolled[0] = rolled[0] or (s.is_playing and t <= max(start, pre + 4))
             if waited[0] > 6000 or (rolled[0] and (not s.is_playing or t >= end + 0.5)):  # +0.5: graba el valor final
                 s.record_mode = False
                 s.loop = loop
@@ -575,7 +577,7 @@ class AbletonClaude(ControlSurface):
             self.schedule_message(1, tick)
 
         self.schedule_message(3, tick)
-        return round((end - max(0.0, start - 4)) * 60.0 / s.tempo, 1)
+        return round((end - pre) * 60.0 / s.tempo, 1)
 
     def cmd_record_master(self, start, end, name="Master Rec"):
         """Graba la salida del master (entrada Resampling) en una pista de audio del Arrangement, en tiempo real."""
