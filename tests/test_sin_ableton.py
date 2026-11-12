@@ -113,7 +113,7 @@ def _arr_clip(t, start, length):
 
 song = Obj(tempo=126.0, is_playing=False, current_song_time=4.0, tracks=[track("Kick"), track("Bass")], return_tracks=[],
            master_track=track("Master"), signature_numerator=4, signature_denominator=4, view=Obj(),
-           root_note=0, scale_name="Major")
+           root_note=0, scale_name="Major", loop=True)
 for _t in song.tracks:
     _t.create_midi_clip = lambda st, ln, t=_t: _arr_clip(t, st, ln)
     _t.delete_clip = lambda c, t=_t: t.arrangement_clips.remove(c)
@@ -242,10 +242,11 @@ async def main():
     seen = []
     while queued:
         queued.pop(0)()
+        assert not song.loop or not queued, 'loop activo durante la grabacion'
         seen.append((song.current_song_time, song.record_mode))
         song.current_song_time += 0.5
     assert not any(r for t, r in seen if t < 8) and (10.0, True) in seen, seen
-    assert not song.record_mode and not mt.arm and song.tracks[1].arm and not song.is_playing and surface._rec is None
+    assert not song.record_mode and not mt.arm and song.tracks[1].arm and not song.is_playing and surface._rec is None and song.loop
     song.tracks.pop()
     surface.schedule_message = lambda d, fn: fn()
     assert (await server.ableton_arrange_clear(track=0, from_bar=9))["deleted"] == 1

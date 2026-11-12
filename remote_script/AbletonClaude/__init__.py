@@ -554,6 +554,8 @@ class AbletonClaude(ControlSurface):
         s = self.song()
         s.stop_all_clips()
         s.back_to_arranger = False
+        loop = s.loop
+        s.loop = False  # con el loop del Arrangement puesto nunca llega a end y graba encima en bucle
         s.continue_playing()
         self.schedule_message(1, lambda: setattr(s, "current_song_time", max(0.0, start - 4)))  # 1 compas de preroll
 
@@ -564,6 +566,7 @@ class AbletonClaude(ControlSurface):
             rolled[0] = rolled[0] or (s.is_playing and t <= start)
             if waited[0] > 6000 or (rolled[0] and (not s.is_playing or t >= end + 0.5)):  # +0.5: graba el valor final
                 s.record_mode = False
+                s.loop = loop
                 return finish()
             if rolled[0] and t >= start:
                 if not s.record_mode:
