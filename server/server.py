@@ -247,7 +247,9 @@ async def ableton_record_master(from_bar: float, bars: float) -> dict:
     """Graba la salida del master (con su cadena: limitador incluido) en la pista de audio 'Master Rec' del
     Arrangement, por la entrada Resampling, sin exportar. Live graba en tiempo real: tarda recording_seconds;
     no lances otra grabacion hasta que acabe. Despues ableton_arrange_list(index devuelto) da el
-    file del clip: pasalo a ableton_analyze_audio (LUFS, true peak) o ableton_compare_reference."""
+    file del clip: pasalo a ableton_analyze_audio (LUFS, true peak) o ableton_compare_reference.
+    Live bloquea el wav hasta cerrar el set (guardar no basta): guarda, cierra y reabre Live antes de medir.
+    Al acabar la pista queda muteada para que la toma no se sume al master."""
     start = (from_bar - 1) * 4
     return await call_live("record_master", start=start, end=start + bars * 4)
 

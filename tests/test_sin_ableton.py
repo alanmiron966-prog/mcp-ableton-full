@@ -246,7 +246,7 @@ async def main():
         seen.append((song.current_song_time, song.record_mode))
         song.current_song_time += 0.5
     assert not any(r for t, r in seen if t < 8) and (10.0, True) in seen, seen
-    assert not song.record_mode and not mt.arm and song.tracks[1].arm and not song.is_playing and surface._rec is None and song.loop
+    assert not song.record_mode and not mt.arm and song.tracks[1].arm and not song.is_playing and surface._rec is None and song.loop and mt.mute
     song.tracks.pop()
     surface.schedule_message = lambda d, fn: fn()
     assert (await server.ableton_arrange_clear(track=0, from_bar=9))["deleted"] == 1

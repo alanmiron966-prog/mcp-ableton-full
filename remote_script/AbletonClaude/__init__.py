@@ -598,10 +598,12 @@ class AbletonClaude(ControlSurface):
             x.arm = False
         self._rec = {"armed": armed, "auto_arm": s.session_automation_record}
         s.session_automation_record = False  # que no se grabe automatizacion de paso
+        t.mute = False
         t.arm = True
 
         def finish():
             t.arm = False
+            t.mute = True  # al reproducir, la toma sumaria el master otra vez
             s.stop_playing()
             self._end_rec()
 
