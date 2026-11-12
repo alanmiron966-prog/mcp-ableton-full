@@ -189,21 +189,26 @@ async def main():
     # automatizacion grabada en tiempo real: los ticks (delay > 0) se ejecutan a mano avanzando el tiempo
     queued, rec = [], []
     surface.schedule_message = lambda d, fn: fn() if d == 0 else queued.append(fn)
-    song.current_song_time, song.record_mode, song.back_to_arranger = 0.0, False, True
+    song.current_song_time, song.record_mode, song.back_to_arranger = 100.0, False, True  # cabezal pasado el final
     song.session_automation_record = False
+    song.re_enable_automation = lambda: None
+    song.tracks[0].mixer_device.volume.automation_state = 0
     song.stop_all_clips = lambda: None
-    song.continue_playing = lambda: setattr(song, "is_playing", True)
+    song.is_playing = False
+    play = lambda: setattr(song, "is_playing", True)
+    song.continue_playing = lambda: queued.append(lambda: queued.append(play))  # arranca despues del salto
     for t in song.tracks:
         t.can_be_armed, t.arm = True, t is song.tracks[1]
     vol = song.tracks[0].mixer_device.volume
     au = await server.ableton_arrange_automation(track=0, device="mixer", param="volume",
                                                  points=[{"bar": 3, "value": 0.0}, {"bar": 4, "value": 0.8}])
     assert au["recording_seconds"] == round(8 * 60 / 126, 1) and not song.tracks[1].arm, au
+    queued.reverse()  # el salto al preroll llega tarde (asincrono): el primer tick ve todavia la posicion vieja
     while queued:
         queued.pop(0)()
         rec.append((song.current_song_time, song.record_mode, round(vol.value, 3)))
         song.current_song_time += 0.5
-    assert (4.0, False, 0.0) in rec and (10.0, True, 0.4) in rec, rec  # preroll sin grabar, rampa a mitad
+    assert not any(r for t, r, _ in rec if t < 8) and (10.0, True, 0.4) in rec, rec  # preroll sin grabar, rampa a mitad
     assert not song.record_mode and vol.value == 0.8 and song.tracks[1].arm and surface._rec is None
     surface.schedule_message = lambda d, fn: fn()
     assert (await server.ableton_arrange_clear(track=0, from_bar=9))["deleted"] == 1

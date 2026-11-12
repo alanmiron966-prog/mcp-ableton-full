@@ -512,7 +512,7 @@ class AbletonClaude(ControlSurface):
             t.arm = False
         self._rec = {"armed": armed, "auto_arm": s.session_automation_record}
         s.session_automation_record = True  # boton Automation Arm: sin el no se graba automatizacion
-        p.value = pts[0][1]
+        s.re_enable_automation()  # si el parametro esta en override, Live no graba encima
         s.stop_all_clips()
         s.back_to_arranger = False
         s.continue_playing()
@@ -520,18 +520,20 @@ class AbletonClaude(ControlSurface):
 
         def finish():
             s.record_mode = False
-            p.value = pts[-1][1]
+            s.re_enable_automation()  # mover el parametro sin grabar lo deja en override
             s.session_automation_record = self._rec["auto_arm"]
             for t in self._rec["armed"]:
                 t.arm = True
             self._rec = None
 
-        def tick(waited=[0]):
+        def tick(waited=[0], rolled=[False]):
             t = s.current_song_time
             waited[0] += 1
-            if not s.is_playing or t >= end or waited[0] > 6000:
+            # play y salto al preroll son asincronos: hasta ver ambos, is_playing y t son los viejos
+            rolled[0] = rolled[0] or (s.is_playing and t <= start)
+            if waited[0] > 6000 or (rolled[0] and (not s.is_playing or t >= end + 0.5)):  # +0.5: graba el valor final
                 return finish()
-            if t >= start:
+            if rolled[0] and t >= start:
                 if not s.record_mode:
                     s.record_mode = True
                 p.value = max(p.min, min(p.max, at(t)))
@@ -539,5 +541,5 @@ class AbletonClaude(ControlSurface):
 
         self.schedule_message(3, tick)
         secs = (end - max(0.0, start - 4)) * 60.0 / s.tempo
-        return {"param": p.name, "recording_seconds": round(secs, 1),
+        return {"param": p.name, "automation_state": p.automation_state, "recording_seconds": round(secs, 1),
                 "from": p.str_for_value(pts[0][1]), "to": p.str_for_value(pts[-1][1])}
