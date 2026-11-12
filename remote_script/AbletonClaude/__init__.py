@@ -31,6 +31,8 @@ def _parse_display(text):
     rest = s[m.end():].strip()
     if rest.startswith("k"):
         v *= 1000.0
+    elif rest.startswith("ms"):  # tiempos en segundos: '200.0 ms' y '1.000 sec' se comparan igual
+        v /= 1000.0
     return v
 
 
@@ -145,7 +147,7 @@ class AbletonClaude(ControlSurface):
         """Valor interno de Live para un valor como se ve ('250 Hz', '-3 dB'): se busca por biseccion."""
         target = _parse_display(display)
         if target is None:
-            raise ValueError("No entiendo el valor '%s'" % display)
+            return AbletonClaude._text_value(p, display)
         lo, hi = p.min, p.max
         asc = (_parse_display(p.str_for_value(hi)) or 0) >= (_parse_display(p.str_for_value(lo)) or 0)
         for _ in range(40):
@@ -158,6 +160,19 @@ class AbletonClaude(ControlSurface):
             else:
                 hi = mid
         return min((lo, hi), key=lambda v: abs((_parse_display(p.str_for_value(v)) or 0) - target))
+
+    @staticmethod
+    def _text_value(p, text):
+        """Opcion de lista por su texto ('Low Cut', 'Opto'): recorre el rango y toma el centro del tramo."""
+        t = str(text).strip().lower()
+        vals = [p.min + (p.max - p.min) * i / 1000.0 for i in range(1001)]
+        shown = [p.str_for_value(v) for v in vals]
+        hits = [v for v, d in zip(vals, shown) if d.strip().lower() == t]
+        if not hits:
+            opts = sorted(set(shown), key=shown.index)[:30]
+            raise ValueError("'%s' no es una opcion de '%s'. Opciones: %s" % (text, p.name, ", ".join(opts)))
+        v = hits[len(hits) // 2]
+        return round(v) if p.is_quantized else v
 
     @staticmethod
     def _set_param(p, value=None, display=None):
@@ -458,10 +473,11 @@ class AbletonClaude(ControlSurface):
             s.start_playing()
         return {"playing": True}
 
-    def cmd_device_params(self, track, device):
+    def cmd_device_params(self, track, device, match=None):
         d = self._device(track, device)
+        m = (match or "").lower()
         return {"device": d.name, "class": d.class_name,
-                "params": [self._param_info(i, p) for i, p in enumerate(d.parameters)]}
+                "params": [self._param_info(i, p) for i, p in enumerate(d.parameters) if m in p.name.lower()]}
 
     def cmd_set_device_param(self, track, device, param, value=None, display=None):
         return self._set_param(self._find_param(self._device(track, device), param), value=value, display=display)

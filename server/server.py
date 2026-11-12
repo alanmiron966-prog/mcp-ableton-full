@@ -132,16 +132,18 @@ async def ableton_delete_track(track: int) -> dict:
 
 
 @mcp.tool(annotations=READ)
-async def ableton_device_params(track: Track, device: int | str) -> dict:
-    """Parametros de un dispositivo (indice o parte del nombre) con su valor visible ('250 Hz')."""
-    return await call_live("device_params", track=track, device=device)
+async def ableton_device_params(track: Track, device: int | str, match: str | None = None) -> dict:
+    """Parametros de un dispositivo (indice o parte del nombre) con su valor visible ('250 Hz').
+    match filtra por parte del nombre del parametro (ej. 'Band 1') para no listar cientos."""
+    return await call_live("device_params", track=track, device=device, match=match)
 
 
 @mcp.tool(annotations=WRITE)
 async def ableton_set_device_param(
     track: Track, device: int | str, param: int | str, value: float | None = None, display: str | None = None
 ) -> dict:
-    """Cambia un parametro. Usa display con unidades reales ('250 Hz', '-3 dB', '2.5 kHz') o value interno."""
+    """Cambia un parametro. Usa display con unidades reales ('250 Hz', '-3 dB', '2.5 kHz', '100 ms'),
+    el texto de una opcion de lista ('Low Cut', 'Opto') o value interno."""
     return await call_live("set_device_param", track=track, device=device, param=param, value=value, display=display)
 
 

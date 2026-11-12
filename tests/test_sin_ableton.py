@@ -58,6 +58,17 @@ assert rs.AbletonClaude._set_param(p, display="-6")["display"] == "-6.0 dB"
 q = Param("Band 1 Frequency", freq_fmt)
 assert rs.AbletonClaude._set_param(q, display="250 Hz")["display"] == "250.0 Hz"
 assert rs.AbletonClaude._set_param(q, display="2.5 kHz")["display"] == "2.50 kHz"
+# tiempos que cambian de ms a sec a mitad del rango (como el release de Pro-C 2)
+rel = Param("Release", lambda v: "%.1f ms" % (10 * 500 ** v) if 10 * 500 ** v < 1000 else "%.3f sec" % (10 * 500 ** v / 1000))
+assert rs.AbletonClaude._set_param(rel, display="100 ms")["display"] == "100.0 ms"
+assert rs.AbletonClaude._set_param(rel, display="2 sec")["display"] == "2.000 sec"
+# opciones de lista por texto (como Shape de Pro-Q 4)
+shape = Param("Band 1 Shape", lambda v: ["Bell", "Low Shelf", "Low Cut", "High Shelf"][min(int(v * 4), 3)])
+assert rs.AbletonClaude._set_param(shape, display="low cut")["display"] == "Low Cut"
+try:
+    rs.AbletonClaude._set_param(shape, display="Notch"); raise SystemExit("deberia fallar con opcion inexistente")
+except ValueError as e:
+    assert "Low Cut" in str(e), e
 q.is_enabled = False
 try:
     rs.AbletonClaude._set_param(q, value=0.3); raise SystemExit("deberia fallar con parametro bloqueado")
@@ -144,6 +155,11 @@ async def main():
         raise SystemExit("deberia fallar: no hay dispositivos")
     except Exception as e:
         assert "No hay dispositivo" in str(e), e
+    song.tracks[1].devices = [Obj(name="Pro-Q 4", class_name="PluginDevice",
+                                  parameters=[Param("Band 1 Used", str), Param("Band 2 Used", str), Param("Output Level", str)])]
+    got = await server.ableton_device_params(track=1, device="Pro-Q", match="band 1")
+    assert [x["name"] for x in got["params"]] == ["Band 1 Used"], got
+    song.tracks[1].devices = []
     # onboarding: perfil vacio -> pide datos; plugins que cierran Live no se ofrecen
     prof = await server.ableton_get_profile()
     assert not prof["configurado"] and prof["falta"] == ["nombre", "generos", "referencias"]
