@@ -67,7 +67,7 @@ async def call_live(type_: str, **params: Any) -> Any:
 
 @mcp.tool(annotations=READ)
 async def ableton_status() -> dict:
-    """Tempo, si esta sonando, compas y numero de pistas del proyecto abierto."""
+    """Tempo, si esta sonando, compas, posicion del cabezal (bar) y numero de pistas del proyecto abierto."""
     return await call_live("status")
 
 

@@ -198,7 +198,9 @@ class AbletonClaude(ControlSurface):
     def cmd_status(self):
         s = self.song()
         return {"tempo": s.tempo, "playing": s.is_playing, "tracks": len(s.tracks),
-                "returns": len(s.return_tracks), "time_signature": "%d/%d" % (s.signature_numerator, s.signature_denominator)}
+                "returns": len(s.return_tracks), "time_signature": "%d/%d" % (s.signature_numerator, s.signature_denominator),
+                # compas del cabezal (1 = inicio); current_song_time va en negras
+                "bar": round(s.current_song_time / (s.signature_numerator * 4.0 / s.signature_denominator) + 1, 2)}
 
     def cmd_list_tracks(self):
         return [self._track_info(r, t) for r, t in self._all_tracks()]

@@ -100,7 +100,7 @@ def _arr_clip(t, start, length):
     t.arrangement_clips.append(c); return c
 
 
-song = Obj(tempo=126.0, is_playing=False, tracks=[track("Kick"), track("Bass")], return_tracks=[],
+song = Obj(tempo=126.0, is_playing=False, current_song_time=4.0, tracks=[track("Kick"), track("Bass")], return_tracks=[],
            master_track=track("Master"), signature_numerator=4, signature_denominator=4, view=Obj(),
            root_note=0, scale_name="Major")
 for _t in song.tracks:
@@ -133,7 +133,8 @@ server._user_folders = lambda: {LIB: "LIB"}
 
 
 async def main():
-    assert (await server.ableton_status())["tempo"] == 126.0
+    st = await server.ableton_status()
+    assert st["tempo"] == 126.0 and st["bar"] == 2.0
     assert (await server.ableton_set_mixer(track=1, volume_db=-3))["volume"] == "-3.0 dB"
     tracks = await server.ableton_list_tracks()
     assert [t["name"] for t in tracks] == ["Kick", "Bass", "Master"] and tracks[1]["volume"] == "-3.0 dB"
