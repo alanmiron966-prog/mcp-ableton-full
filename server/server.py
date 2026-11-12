@@ -29,7 +29,9 @@ mcp = MCPServer(
         "nombre, generos y 1-3 temas de referencia (ruta de un archivo de audio) y guardalos con "
         "ableton_set_profile y ableton_add_reference. Para mezclar usa solo plugins de 'plugins_listos'. "
         "get_profile tambien trae el resumen de samples y librerias (escaneadas al conectar): para elegir sonidos "
-        "usa ableton_find_samples con tipo (kick, clap, hat_closed...) antes que palabras sueltas."
+        "usa ableton_find_samples con tipo (kick, clap, hat_closed...) antes que palabras sueltas. "
+        "Antes del master, si perfil.notas no lo dice ya, pregunta si quiere exportar la mezcla y masterizar "
+        "aparte o masterizar en la misma sesion, y guarda la respuesta en notas con ableton_set_profile."
     ),
 )
 
