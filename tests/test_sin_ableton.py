@@ -249,6 +249,10 @@ async def main():
     assert not song.record_mode and not mt.arm and song.tracks[1].arm and not song.is_playing and surface._rec is None and song.loop and mt.mute
     song.tracks.pop()
     surface.schedule_message = lambda d, fn: fn()
+    assert await server._song_end() == 64.0  # clip de los compases 9-17 en la pista 0
+    song.tracks[0].mute = True
+    assert await server._song_end() == 0.0  # pistas en mute (referencia) no cuentan
+    song.tracks[0].mute = False
     assert (await server.ableton_arrange_clear(track=0, from_bar=9))["deleted"] == 1
     assert (await server.ableton_arrange_clear(track=0))["deleted"] == 1
     assert not song.tracks[0].clip_slots[2].has_clip

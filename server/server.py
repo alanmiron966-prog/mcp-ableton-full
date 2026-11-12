@@ -242,16 +242,27 @@ async def ableton_arrange_list(track: int | str) -> list:
     return await call_live("arrange_list", track=track)
 
 
+async def _song_end() -> float:
+    """Beat donde acaba el ultimo clip del Arrangement en pistas sin mute (la referencia y Master Rec quedan fuera)."""
+    ends = [c["end"] for t in await call_live("list_tracks") if isinstance(t["ref"], int) and not t["mute"]
+            for c in await call_live("arrange_list", track=t["ref"])]
+    return max(ends, default=0.0)
+
+
 @mcp.tool(annotations=WRITE)
-async def ableton_record_master(from_bar: float, bars: float) -> dict:
+async def ableton_record_master(from_bar: float = 1, bars: float | None = None) -> dict:
     """Graba la salida del master (con su cadena: limitador incluido) en la pista de audio 'Master Rec' del
     Arrangement, por la entrada Resampling, sin exportar. Live graba en tiempo real: tarda recording_seconds;
     no lances otra grabacion hasta que acabe. Despues ableton_arrange_list(index devuelto) da el
     file del clip: pasalo a ableton_analyze_audio (LUFS, true peak) o ableton_compare_reference.
     Live bloquea el wav hasta cerrar el set (guardar no basta): guarda, cierra y reabre Live antes de medir.
-    Al acabar la pista queda muteada para que la toma no se sume al master."""
+    Al acabar la pista queda muteada para que la toma no se sume al master.
+    Sin bars graba hasta el final del ultimo clip (cancion entera con from_bar=1)."""
     start = (from_bar - 1) * 4
-    return await call_live("record_master", start=start, end=start + bars * 4)
+    end = start + bars * 4 if bars else await _song_end()
+    if end <= start:
+        raise ToolError("No hay clips en el Arrangement despues del compas %s" % from_bar)
+    return await call_live("record_master", start=start, end=end)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
