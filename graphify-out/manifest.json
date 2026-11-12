@@ -1,0 +1,128 @@
+{
+  ".claude/skills/mcp-builder/scripts/connections.py": {
+    "mtime": 1794430586.317565,
+    "seen": 1794446450.6426198,
+    "ast_hash": "1606c9917623cc43787353d2cd8731ff",
+    "semantic_hash": "1606c9917623cc43787353d2cd8731ff"
+  },
+  ".claude/skills/mcp-builder/scripts/evaluation.py": {
+    "mtime": 1794430586.361907,
+    "seen": 1794446450.6426325,
+    "ast_hash": "1a26a79489e2ae76029ec68b32065e61",
+    "semantic_hash": "1a26a79489e2ae76029ec68b32065e61"
+  },
+  ".mcp.json": {
+    "mtime": 1794430836.8333938,
+    "seen": 1794446450.642638,
+    "ast_hash": "e25bb619c73d5389cd017ffebccd2e02",
+    "semantic_hash": "e25bb619c73d5389cd017ffebccd2e02"
+  },
+  "remote_script/AbletonClaude/__init__.py": {
+    "mtime": 1794449059.7055507,
+    "seen": 1794449115.056312,
+    "ast_hash": "90acd88a387711cee36cc79c71d7e813",
+    "semantic_hash": ""
+  },
+  "server/analysis.py": {
+    "mtime": 1794445402.4039676,
+    "seen": 1794446450.642645,
+    "ast_hash": "dd2c73c71cae5eba384d2ba4856d8c59",
+    "semantic_hash": "dd2c73c71cae5eba384d2ba4856d8c59"
+  },
+  "server/batch_presets.py": {
+    "mtime": 1794439282.0244503,
+    "seen": 1794446450.642649,
+    "ast_hash": "5b85ae823b2ff49ee5f5227613167e43",
+    "semantic_hash": "5b85ae823b2ff49ee5f5227613167e43"
+  },
+  "server/preset_gen.py": {
+    "mtime": 1794436637.3754518,
+    "seen": 1794446450.6426518,
+    "ast_hash": "8202f8a7cf493deee78df194595389fe",
+    "semantic_hash": "8202f8a7cf493deee78df194595389fe"
+  },
+  "server/pyproject.toml": {
+    "mtime": 1794430640.4449227,
+    "seen": 1794446450.6426547,
+    "ast_hash": "cc60c4a7178000b445c0af40872970c6",
+    "semantic_hash": "cc60c4a7178000b445c0af40872970c6"
+  },
+  "server/server.py": {
+    "mtime": 1794449072.9235437,
+    "seen": 1794449115.0567467,
+    "ast_hash": "4ecaa548e3f5be28d50f7b11c7a772a4",
+    "semantic_hash": ""
+  },
+  "server/vst3_scan.py": {
+    "mtime": 1794439354.8086505,
+    "seen": 1794446450.6426606,
+    "ast_hash": "53f48fda310bf93f3c2ca0d6d1022e0a",
+    "semantic_hash": "53f48fda310bf93f3c2ca0d6d1022e0a"
+  },
+  "tests/test_sin_ableton.py": {
+    "mtime": 1794449101.9633803,
+    "seen": 1794449115.0568516,
+    "ast_hash": "b65ca7722802a7fbeffba873ba9c5143",
+    "semantic_hash": ""
+  },
+  "referencia/How Ya Feelin (YouTube).wav": {
+    "mtime": 1794445224.7294946,
+    "seen": 1794446450.6426673,
+    "ast_hash": "d5b6e9c199161a0aae99eac3434a0539",
+    "semantic_hash": "d5b6e9c199161a0aae99eac3434a0539"
+  },
+  "referencia/How Ya Feelin\u2019.mp4": {
+    "mtime": 1794444841.2234893,
+    "seen": 1794446450.6426723,
+    "ast_hash": "de27e4073bf8d5db7c7cf3bdcb5933a2",
+    "semantic_hash": "de27e4073bf8d5db7c7cf3bdcb5933a2"
+  },
+  ".claude/skills/mcp-builder/LICENSE.txt": {
+    "mtime": 1794430586.4942775,
+    "seen": 1794447125.786762,
+    "ast_hash": "b895df9142976f87a996eaf2e50fcfc0",
+    "semantic_hash": ""
+  },
+  ".claude/skills/mcp-builder/SKILL.md": {
+    "mtime": 1794430586.3774629,
+    "seen": 1794447125.7867641,
+    "ast_hash": "cb0332547368715c1945f302d297f65c",
+    "semantic_hash": ""
+  },
+  ".claude/skills/mcp-builder/reference/evaluation.md": {
+    "mtime": 1794430586.4601793,
+    "seen": 1794447125.7867658,
+    "ast_hash": "c20f36eb6a9e8f0e7bdbe625a54f4396",
+    "semantic_hash": ""
+  },
+  ".claude/skills/mcp-builder/reference/mcp_best_practices.md": {
+    "mtime": 1794430586.3978832,
+    "seen": 1794447125.7867677,
+    "ast_hash": "40b4b4097253fe25a37bc1cd8c8e4728",
+    "semantic_hash": ""
+  },
+  ".claude/skills/mcp-builder/reference/node_mcp_server.md": {
+    "mtime": 1794430586.4822493,
+    "seen": 1794447125.7867692,
+    "ast_hash": "cad86b4bd3437441623bc6e35b341c72",
+    "semantic_hash": ""
+  },
+  ".claude/skills/mcp-builder/reference/node_mcp_server_v2.md": {
+    "mtime": 1794430586.4223971,
+    "seen": 1794447125.7867713,
+    "ast_hash": "bd6f20c4351a8db79faf4236d3a46e5f",
+    "semantic_hash": ""
+  },
+  ".claude/skills/mcp-builder/reference/python_mcp_server.md": {
+    "mtime": 1794430586.4396982,
+    "seen": 1794447125.7867727,
+    "ast_hash": "b6e242e5cf7bc8d30abc7bbd4d9a21ec",
+    "semantic_hash": ""
+  },
+  ".claude/skills/mcp-builder/scripts/requirements.txt": {
+    "mtime": 1794430586.3315902,
+    "seen": 1794447125.7867746,
+    "ast_hash": "6b5eb2873ee0dd7a24a96d89cced5c38",
+    "semantic_hash": ""
+  }
+}

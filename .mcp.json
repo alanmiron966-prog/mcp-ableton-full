@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "ableton": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "C:\\Users\\HP_Store\\Desktop\\Claude\\Ableton MCP\\server",
+        "python",
+        "server.py"
+      ],
+      "env": {}
+    }
+  }
+}
