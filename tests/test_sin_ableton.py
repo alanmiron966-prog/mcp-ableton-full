@@ -186,6 +186,26 @@ async def main():
     await server.ableton_arrange_clip(track=0, bar=9, bars=8, notes=kick)
     await server.ableton_arrange_clip(track=0, bar=5, bars=2, notes=kick)  # pisa el primero: lo reemplaza
     assert [c["start"] for c in await server.ableton_arrange_list(track=0)] == [32.0, 16.0]
+    # automatizacion grabada en tiempo real: los ticks (delay > 0) se ejecutan a mano avanzando el tiempo
+    queued, rec = [], []
+    surface.schedule_message = lambda d, fn: fn() if d == 0 else queued.append(fn)
+    song.current_song_time, song.record_mode, song.back_to_arranger = 0.0, False, True
+    song.session_automation_record = False
+    song.stop_all_clips = lambda: None
+    song.continue_playing = lambda: setattr(song, "is_playing", True)
+    for t in song.tracks:
+        t.can_be_armed, t.arm = True, t is song.tracks[1]
+    vol = song.tracks[0].mixer_device.volume
+    au = await server.ableton_arrange_automation(track=0, device="mixer", param="volume",
+                                                 points=[{"bar": 3, "value": 0.0}, {"bar": 4, "value": 0.8}])
+    assert au["recording_seconds"] == round(8 * 60 / 126, 1) and not song.tracks[1].arm, au
+    while queued:
+        queued.pop(0)()
+        rec.append((song.current_song_time, song.record_mode, round(vol.value, 3)))
+        song.current_song_time += 0.5
+    assert (4.0, False, 0.0) in rec and (10.0, True, 0.4) in rec, rec  # preroll sin grabar, rampa a mitad
+    assert not song.record_mode and vol.value == 0.8 and song.tracks[1].arm and surface._rec is None
+    surface.schedule_message = lambda d, fn: fn()
     assert (await server.ableton_arrange_clear(track=0, from_bar=9))["deleted"] == 1
     assert (await server.ableton_arrange_clear(track=0))["deleted"] == 1
     assert not song.tracks[0].clip_slots[2].has_clip

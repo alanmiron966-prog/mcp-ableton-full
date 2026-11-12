@@ -220,6 +220,18 @@ async def ableton_arrange_clip(track: int, bar: float, bars: float, notes: list[
     return await call_live("arrange_clip", track=track, start=(bar - 1) * 4, length=bars * 4, notes=notes, name=name)
 
 
+@mcp.tool(annotations=WRITE)
+async def ableton_arrange_automation(track: int | str, device: str | int, param: str | int,
+                                     points: list[dict]) -> dict:
+    """Graba automatizacion en el Arrangement. Live la graba en tiempo real: reproduce desde un compas
+    antes del primer punto hasta el ultimo, asi que tarda lo que dure el tramo (recording_seconds); no
+    lances otra hasta que termine. device: indice o nombre, o "mixer" con param "volume", "pan", "send 0".
+    points: [{"bar": compas (1 = inicio, admite decimales), "display": "-12 dB" | "800 Hz"} o {"bar", "value"}];
+    rampa lineal entre puntos. Mira los parametros antes con ableton_device_params."""
+    pts = [{**{k: v for k, v in x.items() if k != "bar"}, "beat": (x["bar"] - 1) * 4} for x in points]
+    return await call_live("arrange_automation", track=track, device=device, param=param, points=pts)
+
+
 @mcp.tool(annotations=READ)
 async def ableton_arrange_list(track: int | str) -> list:
     """Clips del Arrangement de una pista: nombre, start y end en beats (compas = beats/4 + 1)."""

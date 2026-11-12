@@ -141,24 +141,29 @@ class AbletonClaude(ControlSurface):
                 "display": p.str_for_value(p.value), "quantized": p.is_quantized}
 
     @staticmethod
+    def _to_value(p, display):
+        """Valor interno de Live para un valor como se ve ('250 Hz', '-3 dB'): se busca por biseccion."""
+        target = _parse_display(display)
+        if target is None:
+            raise ValueError("No entiendo el valor '%s'" % display)
+        lo, hi = p.min, p.max
+        asc = (_parse_display(p.str_for_value(hi)) or 0) >= (_parse_display(p.str_for_value(lo)) or 0)
+        for _ in range(40):
+            mid = (lo + hi) / 2.0
+            cur = _parse_display(p.str_for_value(mid))
+            if cur is None:
+                raise ValueError("El parametro '%s' no muestra un numero" % p.name)
+            if (cur < target) == asc:
+                lo = mid
+            else:
+                hi = mid
+        return min((lo, hi), key=lambda v: abs((_parse_display(p.str_for_value(v)) or 0) - target))
+
+    @staticmethod
     def _set_param(p, value=None, display=None):
-        """value = valor interno de Live. display = valor como se ve ('250 Hz', '-3 dB'): se busca por biseccion."""
+        """value = valor interno de Live. display = valor como se ve ('250 Hz', '-3 dB')."""
         if display is not None:
-            target = _parse_display(display)
-            if target is None:
-                raise ValueError("No entiendo el valor '%s'" % display)
-            lo, hi = p.min, p.max
-            asc = (_parse_display(p.str_for_value(hi)) or 0) >= (_parse_display(p.str_for_value(lo)) or 0)
-            for _ in range(40):
-                mid = (lo + hi) / 2.0
-                cur = _parse_display(p.str_for_value(mid))
-                if cur is None:
-                    raise ValueError("El parametro '%s' no muestra un numero" % p.name)
-                if (cur < target) == asc:
-                    lo = mid
-                else:
-                    hi = mid
-            value = min((lo, hi), key=lambda v: abs((_parse_display(p.str_for_value(v)) or 0) - target))
+            value = AbletonClaude._to_value(p, display)
         if value is None:
             raise ValueError("Falta value o display")
         if not p.is_enabled:
@@ -457,14 +462,82 @@ class AbletonClaude(ControlSurface):
                 "params": [self._param_info(i, p) for i, p in enumerate(d.parameters)]}
 
     def cmd_set_device_param(self, track, device, param, value=None, display=None):
-        d = self._device(track, device)
+        return self._set_param(self._find_param(self._device(track, device), param), value=value, display=display)
+
+    @staticmethod
+    def _find_param(d, param):
         params = list(d.parameters)
         if isinstance(param, int) or str(param).isdigit():
-            p = params[int(param)]
-        else:
-            matches = [x for x in params if x.name.lower() == str(param).lower()] or \
-                      [x for x in params if str(param).lower() in x.name.lower()]
-            if not matches:
-                raise ValueError("'%s' no tiene parametro '%s'. Usa device_params." % (d.name, param))
-            p = matches[0]
-        return self._set_param(p, value=value, display=display)
+            return params[int(param)]
+        matches = [x for x in params if x.name.lower() == str(param).lower()] or \
+                  [x for x in params if str(param).lower() in x.name.lower()]
+        if not matches:
+            raise ValueError("'%s' no tiene parametro '%s'. Usa device_params." % (d.name, param))
+        return matches[0]
+
+    def _auto_param(self, track, device, param):
+        if str(device).lower() == "mixer":  # param: volume, pan, send N
+            m = self._track(track).mixer_device
+            key = str(param).lower()
+            if key.startswith("vol"):
+                return m.volume
+            if key.startswith("pan"):
+                return m.panning
+            if key.startswith("send"):
+                return m.sends[int(key.split()[-1])]
+            raise ValueError("mixer: usa volume, pan o 'send N'")
+        return self._find_param(self._device(track, device), param)
+
+    def cmd_arrange_automation(self, track, device, param, points):
+        """Graba automatizacion en el Arrangement en tiempo real (la API no deja escribirla directo).
+        points: [{beat (absoluto), value o display}], rampa lineal. Vuelve enseguida; la grabacion dura lo que el tramo."""
+        s = self.song()
+        p = self._auto_param(track, device, param)
+        pts = sorted((float(x["beat"]), self._to_value(p, x["display"]) if "display" in x else float(x["value"]))
+                     for x in points)
+        if len(pts) < 2:
+            raise ValueError("Hacen falta al menos dos puntos")
+        if getattr(self, "_rec", None):
+            raise ValueError("Ya hay una grabacion de automatizacion en curso")
+        start, end = pts[0][0], pts[-1][0]
+
+        def at(t):
+            for (b0, v0), (b1, v1) in zip(pts, pts[1:]):
+                if t <= b1:
+                    return v0 + (v1 - v0) * max(0.0, t - b0) / ((b1 - b0) or 1)
+            return pts[-1][1]
+
+        armed = [t for t in s.tracks if t.can_be_armed and t.arm]
+        for t in armed:  # sin pistas armadas solo se graba automatizacion
+            t.arm = False
+        self._rec = {"armed": armed, "auto_arm": s.session_automation_record}
+        s.session_automation_record = True  # boton Automation Arm: sin el no se graba automatizacion
+        p.value = pts[0][1]
+        s.stop_all_clips()
+        s.back_to_arranger = False
+        s.continue_playing()
+        self.schedule_message(1, lambda: setattr(s, "current_song_time", max(0.0, start - 4)))  # 1 compas de preroll
+
+        def finish():
+            s.record_mode = False
+            p.value = pts[-1][1]
+            s.session_automation_record = self._rec["auto_arm"]
+            for t in self._rec["armed"]:
+                t.arm = True
+            self._rec = None
+
+        def tick(waited=[0]):
+            t = s.current_song_time
+            waited[0] += 1
+            if not s.is_playing or t >= end or waited[0] > 6000:
+                return finish()
+            if t >= start:
+                if not s.record_mode:
+                    s.record_mode = True
+                p.value = max(p.min, min(p.max, at(t)))
+            self.schedule_message(1, tick)
+
+        self.schedule_message(3, tick)
+        secs = (end - max(0.0, start - 4)) * 60.0 / s.tempo
+        return {"param": p.name, "recording_seconds": round(secs, 1),
+                "from": p.str_for_value(pts[0][1]), "to": p.str_for_value(pts[-1][1])}
