@@ -7,6 +7,7 @@ import time
 from typing import Any, Literal
 
 import analysis
+import livepaths
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -15,8 +16,7 @@ HOST = "127.0.0.1"
 PORT = int(os.environ.get("ABLETON_CLAUDE_PORT", "9877"))
 HOME = os.environ.get("ABLETON_CLAUDE_HOME", os.path.join(os.path.expanduser("~"), ".ableton-mcp"))
 PROFILE = os.path.join(HOME, "perfil.json")
-PRESETS = os.environ.get("ABLETON_CLAUDE_PRESETS",
-                         r"C:\Users\HP_Store\Desktop\samples alan droops\User Library\Claude Presets")
+PRESETS = os.environ.get("ABLETON_CLAUDE_PRESETS", os.path.join(livepaths.user_library() or HOME, "Claude Presets"))
 AUDIO_EXT = (".wav", ".mp3", ".flac", ".aif", ".aiff", ".m4a", ".ogg")
 
 mcp = MCPServer(
@@ -255,7 +255,7 @@ async def ableton_record_master(from_bar: float = 1, bars: float | None = None) 
     Arrangement, por la entrada Resampling, sin exportar. Live graba en tiempo real: tarda recording_seconds;
     no lances otra grabacion hasta que acabe. Despues ableton_arrange_list(index devuelto) da el
     file del clip: pasalo a ableton_analyze_audio (LUFS, true peak) o ableton_compare_reference.
-    Live bloquea el wav hasta cerrar el set (guardar no basta): guarda, cierra y reabre Live antes de medir.
+    Live bloquea el wav hasta cerrar el set (guardar no basta): despues llama a ableton_reload_set antes de medir.
     Al acabar la pista queda muteada para que la toma no se sume al master.
     Sin bars graba hasta el final del ultimo clip (cancion entera con from_bar=1)."""
     start = (from_bar - 1) * 4
@@ -263,6 +263,62 @@ async def ableton_record_master(from_bar: float = 1, bars: float | None = None) 
     if end <= start:
         raise ToolError("No hay clips en el Arrangement despues del compas %s" % from_bar)
     return await call_live("record_master", start=start, end=end)
+
+
+# Guarda (Ctrl+S hasta que el titulo pierda el '*'), cierra Live y reabre el set. Probado a mano el 2026-11-12.
+RELOAD_PS = r'''
+$ErrorActionPreference = 'Stop'
+$dir = $args[0]
+$p = Get-Process 'Ableton Live 1*' -ErrorAction SilentlyContinue | Where-Object MainWindowTitle | Select-Object -First 1
+if (-not $p) { throw 'Live no esta abierto' }
+$name = ($p.MainWindowTitle -split ' - Ableton Live')[0].TrimEnd('*')
+$als = Join-Path $dir "$name.als"
+if (-not (Test-Path -LiteralPath $als)) { throw "No encuentro $als : guarda el set con nombre en esa carpeta" }
+$sh = New-Object -ComObject WScript.Shell
+for ($i = 0; $i -lt 6; $i++) {
+  $p.Refresh(); if ($p.MainWindowTitle -notmatch '\*') { break }
+  [void]$sh.AppActivate($p.Id); Start-Sleep -Milliseconds 500; $sh.SendKeys('^s'); Start-Sleep 2
+}
+$p.Refresh(); if ($p.MainWindowTitle -match '\*') { throw 'No pude guardar el set: el titulo sigue con *' }
+[void]$p.CloseMainWindow()
+if (-not $p.WaitForExit(90000)) { throw 'Live no se cerro en 90 s (hay un dialogo abierto?)' }
+Start-Process -FilePath $als
+Write-Output $als
+'''
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                      openWorldHint=False))
+async def ableton_reload_set() -> dict:
+    """Guarda el set, cierra Live y lo reabre para que suelte los wav recien grabados (Live los bloquea
+    hasta cerrar el set; guardar no basta). Usalo despues de ableton_record_master y antes de medir.
+    Tarda 30-120 s y Live desaparece un momento: avisa al usuario. Devuelve la ultima toma lista para medir."""
+    if os.name != "nt":
+        raise ToolError("ableton_reload_set solo funciona en Windows")
+    rec = next((t for t in await call_live("list_tracks") if t["name"] == "Master Rec"), None)
+    files = [c["file"] for c in await call_live("arrange_list", track=rec["ref"])] if rec else []
+    files = [f for f in files if os.path.isfile(f)]
+    if not files:
+        raise ToolError("No hay tomas en 'Master Rec': graba antes con ableton_record_master")
+    take = max(files, key=os.path.getmtime)
+    project = os.path.dirname(os.path.dirname(os.path.dirname(take)))  # <proyecto>\Samples\Recorded\toma.wav
+    proc = await asyncio.create_subprocess_exec(
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        "& {%s} '%s'" % (RELOAD_PS, project.replace("'", "''")),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    out, err = await asyncio.wait_for(proc.communicate(), 150)
+    if proc.returncode:
+        raise ToolError("No pude reabrir Live: %s" % err.decode(errors="replace").strip().splitlines()[0])
+    for _ in range(90):  # Live tarda en cargar el set y el Remote Script
+        await asyncio.sleep(2)
+        try:
+            await call_live("ping")
+            break
+        except ToolError:
+            pass
+    else:
+        raise ToolError("Live se reabrio pero AbletonClaude no responde despues de 3 minutos")
+    return {"set": out.decode(errors="replace").strip(), "toma": take}
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
@@ -278,12 +334,7 @@ async def ableton_arrange_clear(track: int | str, from_bar: float | None = None,
 # ---------- sonidos: samples de las carpetas del usuario ----------
 def _user_folders() -> dict:
     """{ruta: nombre en Places} desde el Library.cfg mas reciente de Live."""
-    base = os.path.join(os.environ.get("APPDATA", ""), "Ableton")
-    cfgs = [os.path.join(base, d, "Preferences", "Library.cfg") for d in (os.listdir(base) if os.path.isdir(base) else [])]
-    cfgs = sorted((c for c in cfgs if os.path.isfile(c)), key=os.path.getmtime)
-    if not cfgs:
-        return {}
-    txt = open(cfgs[-1], encoding="utf-8", errors="replace").read()
+    txt = livepaths.library_cfg()
     return {os.path.normpath(p): n for p, n in re.findall(r'<UserFolderInfo Id="\d+" Path="([^"]+)" DisplayName="([^"]*)"', txt)}
 
 

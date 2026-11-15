@@ -300,4 +300,11 @@ quiet = dict(m, lufs=-12.6, plr=13.3, bandas_db=dict(m["bandas_db"], sub=-11))
 d = analysis.compare(quiet, m)
 assert d["lufs"] == -4 and d["bandas_db"]["sub"] == -3 and len(d["notas"]) == 4, d
 assert analysis.compare(m, m)["notas"] == ["true peak 0.70 dBTP: riesgo de clipping al convertir a mp3/streaming"]
+# User Library desde Library.cfg (instalador y carpeta de presets)
+import livepaths  # noqa: E402
+livepaths.library_cfg = lambda: ('<UserLibrary>\n\t<LibraryProject Id="4">\n\t\t<ProjectLocation />\n'
+                                 '\t\t<ProjectName Value="User Library" />\n\t\t<ProjectPath Value="C:/x/libs" />\n')
+assert livepaths.user_library() == os.path.normpath("C:/x/libs/User Library"), livepaths.user_library()
+livepaths.library_cfg = lambda: ""
+assert livepaths.user_library() is None
 print("OK: todas las pruebas pasaron")

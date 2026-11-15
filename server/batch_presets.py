@@ -7,12 +7,13 @@ import re
 import subprocess
 import sys
 
+import livepaths
 import preset_gen
 
 VST3_DIR = r"C:\Program Files\Common Files\VST3"
-OUT_DIR = os.environ.get("ABLETON_CLAUDE_PRESETS",
-                         r"C:\Users\HP_Store\Desktop\samples alan droops\User Library\Claude Presets")
 REPORT = os.path.join(os.path.expanduser("~"), ".ableton-mcp", "plugins.json")
+OUT_DIR = os.environ.get("ABLETON_CLAUDE_PRESETS",
+                         os.path.join(livepaths.user_library() or os.path.dirname(REPORT), "Claude Presets"))
 TIMEOUT = 60
 SCANNER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vst3_scan.py")
 
