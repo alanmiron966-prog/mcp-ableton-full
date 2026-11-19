@@ -41,7 +41,9 @@ mcp = MCPServer(
         "Al acabar cada tarea y cuando el usuario se despida, apunta el avance con ableton_save_project. "
         "Al producir: cada sonido en su propia pista MIDI con su Simpler (kick, clap, hat cerrado, hat abierto, "
         "perc... por separado, nunca juntos en un Drum Rack) para procesarlos aparte. Regla de oro: kick y bajo "
-        "siempre juntos en un bus: crea una pista de audio 'Kick+Bass' y enruta los dos con ableton_route_track."
+        "siempre juntos dentro de un grupo de Live (Group Track; en list_tracks kind 'group' y 'group' en sus pistas). "
+        "La API no crea grupos: si no existe, crea las pistas Kick y Bass seguidas y pide al usuario que las "
+        "seleccione y pulse Ctrl+G. Nunca lo sustituyas por una pista de audio con salidas enrutadas."
     ),
 )
 
@@ -134,13 +136,6 @@ async def ableton_load_device(track: Track, name: str, source: Source = "plugins
 async def ableton_create_track(kind: Literal["audio", "midi"] = "audio", name: str | None = None) -> dict:
     """Crea una pista nueva al final del proyecto."""
     return await call_live("create_track", kind=kind, name=name)
-
-
-@mcp.tool(annotations=WRITE)
-async def ableton_route_track(track: int, to: int | Literal["master"]) -> dict:
-    """Manda la salida de una pista a otra pista (bus) o de vuelta a 'master'. Live no deja crear grupos
-    desde aqui: para agrupar crea una pista de audio (ej. 'Kick+Bass') y enruta las pistas a ella."""
-    return await call_live("route_track", track=track, to=to)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,

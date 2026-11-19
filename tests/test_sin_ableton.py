@@ -112,7 +112,7 @@ def _arr_clip(t, start, length):
 
 
 song = Obj(tempo=126.0, is_playing=False, current_song_time=4.0, tracks=[track("Kick"), track("Bass")], return_tracks=[],
-           master_track=track("Master"), signature_numerator=4, signature_denominator=4, view=Obj(),
+           master_track=track("Main"), signature_numerator=4, signature_denominator=4, view=Obj(),
            root_note=0, scale_name="Major", loop=True)
 for _t in song.tracks:
     _t.create_midi_clip = lambda st, ln, t=_t: _arr_clip(t, st, ln)
@@ -148,7 +148,7 @@ async def main():
     assert st["tempo"] == 126.0 and st["bar"] == 2.0
     assert (await server.ableton_set_mixer(track=1, volume_db=-3))["volume"] == "-3.0 dB"
     tracks = await server.ableton_list_tracks()
-    assert [t["name"] for t in tracks] == ["Kick", "Bass", "Master"] and tracks[1]["volume"] == "-3.0 dB"
+    assert [t["name"] for t in tracks] == ["Kick", "Bass", "Main"] and tracks[1]["volume"] == "-3.0 dB"
     assert (await server.ableton_meters(seconds=0.1))["0"] == 0.7
     try:
         await server.ableton_device_params(track=0, device="Pro-Q")
@@ -200,16 +200,11 @@ async def main():
     prof = await server.ableton_get_profile()
     assert [x["nombre"] for x in prof["perfil"]["proyectos"]] == ["Otro", "Tema UKG"] and prof["set_abierto"] == "Tema UKG"
     assert prof["perfil"]["proyectos"][-1]["pendiente"] == "master"
-    # bus kick+bass: la salida va a la pista por su nombre y el bus queda escuchando (monitor In)
-    a, b = song.tracks[0], song.tracks[1]
-    a.available_output_routing_types = [Obj(display_name="Master"), Obj(display_name=b.name)]
-    assert (await server.ableton_route_track(0, 1))["output"] == b.name and b.current_monitoring_state == 0
-    assert (await server.ableton_route_track(0, "master"))["output"] == "Master"
-    b.available_output_routing_types = [Obj(display_name="Master")]
-    try:
-        await server.ableton_route_track(1, 0); raise SystemExit("deberia fallar: destino no disponible")
-    except Exception as e:
-        assert "Opciones" in str(e), e
+    # grupo: la pista de grupo sale como kind 'group' y sus pistas dicen a que grupo pertenecen
+    g = Obj(name="grove"); song.tracks[0].group_track = song.tracks[1].group_track = g
+    names = {t["name"]: t for t in await server.ableton_list_tracks()}
+    assert names[song.tracks[0].name]["group"] == "grove" and "group" not in names["Main"]
+    song.tracks[0].group_track = song.tracks[1].group_track = None
     # produccion: tempo/tonalidad, clip en un hueco que aun no existe (crea escena), notas, no pisar clips
     s = await server.ableton_set_song(tempo=126, key="f#", scale="Minor")
     assert (s["tempo"], s["key"], s["scale_name"]) == (126.0, "F#", "Minor")

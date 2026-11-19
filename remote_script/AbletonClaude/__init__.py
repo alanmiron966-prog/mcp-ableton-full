@@ -197,6 +197,10 @@ class AbletonClaude(ControlSurface):
                         sends=[s.str_for_value(s.value) for s in m.sends])
         if hasattr(t, "has_midi_input"):
             info["kind"] = "midi" if t.has_midi_input else "audio"
+        if getattr(t, "is_foldable", False):
+            info["kind"] = "group"
+        if getattr(t, "group_track", None) is not None:
+            info["group"] = t.group_track.name
         return info
 
     def _all_tracks(self):
@@ -320,20 +324,6 @@ class AbletonClaude(ControlSurface):
         if name:
             t.name = name
         return {"index": len(s.tracks) - 1, "name": t.name}
-
-    def cmd_route_track(self, track, to):
-        """Manda la salida de una pista a otra (bus) o a 'master'. La LOM no deja crear grupos: un bus suena igual."""
-        t = self._track(track)
-        dest = self.song().master_track if str(to).lower() == "master" else self._track(to)
-        name = "master" if dest == self.song().master_track else dest.name
-        opts = [r for r in t.available_output_routing_types if r.display_name.lower() == name.lower()]
-        if not opts:
-            raise ValueError("'%s' no puede salir a '%s'. Opciones: %s"
-                             % (t.name, name, [r.display_name for r in t.available_output_routing_types]))
-        t.output_routing_type = opts[0]
-        if dest != self.song().master_track:
-            dest.current_monitoring_state = 0  # In: el bus escucha lo que le llega sin armarlo
-        return {"track": t.name, "output": opts[0].display_name}
 
     def cmd_delete_track(self, track):
         s = self.song()
