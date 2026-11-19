@@ -50,7 +50,7 @@ def parse(log):
 
 
 def analyze(path):
-    if not os.path.isfile(path):
+    if not re.match(r"https?://", path) and not os.path.isfile(path):  # ffmpeg tambien lee streams http
         raise FileNotFoundError(path)
     r = subprocess.run([FFMPEG, "-hide_banner", "-nostats", "-i", path, "-filter_complex", _graph(), "-map", "[out]", "-f", "null", "-"],
                        capture_output=True, text=True, encoding="utf-8", errors="replace",

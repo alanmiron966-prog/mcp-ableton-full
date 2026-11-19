@@ -162,14 +162,14 @@ async def main():
     song.tracks[1].devices = []
     # onboarding: perfil vacio -> pide datos; plugins que cierran Live no se ofrecen
     prof = await server.ableton_get_profile()
-    assert not prof["configurado"] and prof["falta"] == ["nombre", "generos", "referencias"]
+    assert not prof["configurado"] and prof["falta"] == ["nombre", "generos", "bpm", "artistas", "referencias"]
     assert prof["samples"]["total"] == 4 and prof["samples"]["por_tipo"]["vocal"] == 1, prof["samples"]
     assert [os.path.basename(x["ruta"]) for x in await server.ableton_find_samples(tipo="kick")] == ["Kick 01.wav"]
     assert (await server.ableton_find_samples(tipo="hat_open"))[0]["libreria"] == "Pack"
     b = await server.ableton_find_samples(tipo="bass", loops=True, bpm=126)
     assert (b[0]["bpm"], b[0]["key"]) == (125, "Fm") and not await server.ableton_find_samples(tipo="bass", bpm=126)
     assert prof["plugins_listos"] == {"EQ": ["Pro-Q 4"]} and prof["no_usar"][0]["plugin"] == "Ozone 11 Imager"
-    await server.ableton_set_profile(nombre="Alan", generos=["techno"])
+    await server.ableton_set_profile(nombre="Alan", generos=["techno"], bpm="130-134", artistas=["A", "B", "C"])
     ref = os.path.join(TMP, "ref.wav")
     open(ref, "wb").close()
     await server.ableton_add_reference(ref, nota="graves")
@@ -181,6 +181,12 @@ async def main():
             assert "No " in str(e), e
     prof = await server.ableton_get_profile()
     assert prof["configurado"] and prof["perfil"]["referencias"] == [{"ruta": ref, "nota": "graves y voz"}]
+    # enlace: se mide una vez (stream) y compare_reference usa la medicion guardada, no la URL caducada
+    m = {"lufs": -8.0}
+    server._measure_url = lambda u: ("Tema", m)
+    await server.ableton_add_reference("https://youtu.be/x", nota="bombo")
+    r = (await server.ableton_get_profile())["perfil"]["referencias"][-1]
+    assert r == {"ruta": "https://youtu.be/x", "nota": "bombo", "titulo": "Tema", "medicion": m}, r
     # produccion: tempo/tonalidad, clip en un hueco que aun no existe (crea escena), notas, no pisar clips
     s = await server.ableton_set_song(tempo=126, key="f#", scale="Minor")
     assert (s["tempo"], s["key"], s["scale_name"]) == (126.0, "F#", "Minor")

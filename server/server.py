@@ -3,6 +3,8 @@ import asyncio
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 from typing import Any, Literal
 
@@ -25,9 +27,11 @@ mcp = MCPServer(
         "Controla Ableton Live abierto. Pistas: indice 0.., 'r0' para retornos, 'master'. "
         "Antes de tocar un plugin, mira sus parametros con ableton_device_params. "
         "Para valores reales usa display (ej. '250 Hz', '-3 dB'); el servidor convierte. "
-        "Al empezar llama a ableton_get_profile: si configurado es false, haz el onboarding preguntando "
-        "nombre, generos y 1-3 temas de referencia (ruta de un archivo de audio) y guardalos con "
-        "ableton_set_profile y ableton_add_reference. Para mezclar usa solo plugins de 'plugins_listos'. "
+        "Al empezar llama a ableton_get_profile: si configurado es false, haz el onboarding preguntando solo lo que "
+        "este en 'falta', una pregunta cada vez y en este orden: nombre artistico; generos; bpm (recomienda tu un rango "
+        "tipico del genero, ej. UK garage 130-138, tech house 124-128, techno 130-140, y que elija); 3 artistas de "
+        "referencia (para entender su sonido); 1-3 temas de referencia (enlace de YouTube o ruta de un archivo de audio) "
+        "y que le gusta de cada uno. Guardalos con ableton_set_profile y ableton_add_reference. Para mezclar usa solo plugins de 'plugins_listos'. "
         "get_profile tambien trae el resumen de samples y librerias (escaneadas al conectar): para elegir sonidos "
         "usa ableton_find_samples con tipo (kick, clap, hat_closed...) antes que palabras sueltas. "
         "Antes del master, si perfil.notas no lo dice ya, pregunta si quiere exportar la mezcla y masterizar "
@@ -527,18 +531,20 @@ def _inventory() -> dict:
 
 @mcp.tool(annotations=READ)
 async def ableton_get_profile() -> dict:
-    """Perfil del usuario (nombre, generos, referencias) y los plugins listos para usar, por categoria."""
+    """Perfil del usuario (nombre, generos, bpm, artistas, referencias) y los plugins listos para usar, por categoria."""
     p = _load(PROFILE, {})
-    falta = [k for k in ("nombre", "generos", "referencias") if not p.get(k)]
+    falta = [k for k in ("nombre", "generos", "bpm", "artistas", "referencias") if not p.get(k)]
     return {"configurado": not falta, "falta": falta, "perfil": p, **_inventory(), "samples": _library_summary()}
 
 
 @mcp.tool(annotations=WRITE)
 async def ableton_set_profile(nombre: str | None = None, generos: list[str] | None = None,
+                              bpm: str | None = None, artistas: list[str] | None = None,
                               notas: str | None = None) -> dict:
-    """Guarda datos del perfil. Solo cambia lo que se pasa."""
+    """Guarda datos del perfil. Solo cambia lo que se pasa. bpm: el que eligio o un rango ('132' o '130-134').
+    artistas: artistas de referencia de su sonido."""
     p = _load(PROFILE, {})
-    for k, v in (("nombre", nombre), ("generos", generos), ("notas", notas)):
+    for k, v in (("nombre", nombre), ("generos", generos), ("bpm", bpm), ("artistas", artistas), ("notas", notas)):
         if v is not None:
             p[k] = v
     p.setdefault("creado", time.strftime("%Y-%m-%d"))
@@ -548,15 +554,20 @@ async def ableton_set_profile(nombre: str | None = None, generos: list[str] | No
 
 @mcp.tool(annotations=ADD)
 async def ableton_add_reference(ruta: str, nota: str = "") -> dict:
-    """Anade un tema de referencia (archivo de audio local) al perfil. nota: que te gusta de su mezcla."""
-    ruta = os.path.abspath(os.path.expanduser(ruta))
-    if not os.path.isfile(ruta):
-        raise ToolError("No existe el archivo: %s" % ruta)
-    if not ruta.lower().endswith(AUDIO_EXT):
-        raise ToolError("No es un archivo de audio (%s)" % ", ".join(AUDIO_EXT))
+    """Anade un tema de referencia al perfil: enlace (YouTube, SoundCloud...) o archivo de audio local.
+    Un enlace se mide al momento leyendo el stream, sin guardar el audio. nota: que te gusta de su mezcla."""
+    ref = {"ruta": ruta, "nota": nota}
+    if re.match(r"https?://", ruta):
+        ref["titulo"], ref["medicion"] = await asyncio.to_thread(_measure_url, ruta)
+    else:
+        ruta = ref["ruta"] = os.path.abspath(os.path.expanduser(ruta))
+        if not os.path.isfile(ruta):
+            raise ToolError("No existe el archivo: %s" % ruta)
+        if not ruta.lower().endswith(AUDIO_EXT):
+            raise ToolError("No es un archivo de audio (%s)" % ", ".join(AUDIO_EXT))
     p = _load(PROFILE, {})
     refs = [r for r in p.get("referencias", []) if r["ruta"].lower() != ruta.lower()]
-    refs.append({"ruta": ruta, "nota": nota})
+    refs.append(ref)
     p["referencias"] = refs
     p.setdefault("creado", time.strftime("%Y-%m-%d"))
     _save_profile(p)
@@ -571,6 +582,22 @@ def _measure(ruta: str) -> dict:
         raise ToolError("No existe el archivo: %s" % ruta)
     except Exception as e:
         raise ToolError("No pude medir %s: %s" % (ruta, e))
+
+
+def _measure_url(url: str) -> tuple[str, dict]:
+    """Pide a yt-dlp la URL directa del audio y ffmpeg la mide en streaming: no queda archivo en disco.
+    La URL directa caduca, por eso la medicion se guarda en el perfil."""
+    r = subprocess.run([sys.executable, "-m", "yt_dlp", "-f", "bestaudio/best", "--no-playlist",
+                        "--print", "title", "--print", "urls", url],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    lines = r.stdout.strip().splitlines()
+    if r.returncode or len(lines) < 2:
+        raise ToolError("No pude abrir el enlace: %s" % ((r.stderr.strip().splitlines() or ["yt-dlp fallo"])[-1]))
+    try:
+        return lines[0], {**analysis.analyze(lines[1]), "archivo": url}
+    except Exception as e:
+        raise ToolError("No pude medir el audio del enlace: %s" % e)
 
 
 @mcp.tool(annotations=READ)
@@ -589,8 +616,9 @@ async def ableton_compare_reference(ruta: str, referencia: int = 0) -> dict:
         raise ToolError("El perfil no tiene referencias. Anade una con ableton_add_reference.")
     if not 0 <= referencia < len(refs):
         raise ToolError("Solo hay %d referencias (indices 0..%d)" % (len(refs), len(refs) - 1))
+    r = refs[referencia]
     mix, ref = await asyncio.gather(asyncio.to_thread(_measure, ruta),
-                                    asyncio.to_thread(_measure, refs[referencia]["ruta"]))
+                                    asyncio.to_thread(lambda: r.get("medicion") or _measure(r["ruta"])))
     return {"mezcla": mix, "referencia": ref, "diferencia": analysis.compare(mix, ref)}
 
 
