@@ -42,7 +42,12 @@ mcp = MCPServer(
         "Al producir: cada sonido en su propia pista MIDI con su Simpler (kick, clap, hat cerrado, hat abierto, "
         "perc... por separado, nunca juntos en un Drum Rack) para procesarlos aparte. Kick y bajo tambien "
         "en pistas separadas, sin agrupar ni enrutar a un bus. Produce siempre en el Arrangement: dibuja los MIDI "
-        "con ableton_arrange_clip, nunca clips de Session (create_clip/add_notes solo si el usuario lo pide)."
+        "con ableton_arrange_clip, nunca clips de Session (create_clip/add_notes solo si el usuario lo pide). "
+        "Cuando pidan una cancion, entrega el proyecto terminado sin parar entre fases: 1) produccion de la "
+        "cancion entera (intro, breaks sin kick, drops, outro), 2) mezcla (EQ, sidechain, reverb/delay, paneo, "
+        "niveles), 3) master en el Main medido contra la referencia con ableton_record_master y "
+        "ableton_compare_reference. Como medir exige el set guardado, al empezar pide que lo guarde con nombre "
+        "(Ctrl+S) si set_abierto es null. Al final resume que se hizo y que no se pudo comprobar."
     ),
 )
 
