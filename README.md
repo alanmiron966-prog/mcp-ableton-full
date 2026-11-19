@@ -1,4 +1,6 @@
-# Ableton MCP
+# MCP Ableton Full
+
+Produce, mezcla y masteriza canciones completas en Ableton Live 12 hablando con Claude.
 
 Controla Ableton Live 12 desde Claude: componer (pistas, clips, notas, samples), arreglar en el Arrangement
 (clips y automatizacion), mezclar (mixer, plugins con valores reales como "250 Hz" o "-3 dB") y medir el
