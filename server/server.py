@@ -38,7 +38,10 @@ mcp = MCPServer(
         "aparte o masterizar en la misma sesion, y guarda la respuesta en notas con ableton_set_profile. "
         "Si perfil.proyectos tiene alguno, al empezar pregunta antes de nada: seguir con el ultimo (di su nombre, "
         "cuando fue y lo pendiente) o empezar uno nuevo; si sigue y set_abierto es otro, pidele que abra ese set. "
-        "Al acabar cada tarea y cuando el usuario se despida, apunta el avance con ableton_save_project."
+        "Al acabar cada tarea y cuando el usuario se despida, apunta el avance con ableton_save_project. "
+        "Al producir: cada sonido en su propia pista MIDI con su Simpler (kick, clap, hat cerrado, hat abierto, "
+        "perc... por separado, nunca juntos en un Drum Rack) para procesarlos aparte. Regla de oro: kick y bajo "
+        "siempre juntos en un bus: crea una pista de audio 'Kick+Bass' y enruta los dos con ableton_route_track."
     ),
 )
 
@@ -133,6 +136,13 @@ async def ableton_create_track(kind: Literal["audio", "midi"] = "audio", name: s
     return await call_live("create_track", kind=kind, name=name)
 
 
+@mcp.tool(annotations=WRITE)
+async def ableton_route_track(track: int, to: int | Literal["master"]) -> dict:
+    """Manda la salida de una pista a otra pista (bus) o de vuelta a 'master'. Live no deja crear grupos
+    desde aqui: para agrupar crea una pista de audio (ej. 'Kick+Bass') y enruta las pistas a ella."""
+    return await call_live("route_track", track=track, to=to)
+
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
                                       openWorldHint=False))
 async def ableton_delete_track(track: int) -> dict:
@@ -188,8 +198,8 @@ async def ableton_create_clip(track: int, slot: int = 0, bars: float = 4, name: 
 @mcp.tool(annotations=ADD)
 async def ableton_add_notes(track: int, slot: int, notes: list[dict], clear: bool = False) -> dict:
     """Escribe notas en un clip MIDI. notes: [{pitch, start, duration, velocity}] con tiempos en beats
-    (1 = negra, 0.25 = semicorchea). pitch MIDI en Drum Rack: 36 kick, 38 snare, 39 clap, 42 hat cerrado,
-    46 hat abierto. clear=True borra antes las notas del clip."""
+    (1 = negra, 0.25 = semicorchea). Pista con Simpler (un sonido por pista): pitch 60 = sample a su tono.
+    En un Drum Rack: 36 kick, 38 snare, 39 clap, 42 hat cerrado, 46 hat abierto. clear=True borra antes las notas."""
     return await call_live("add_notes", track=track, slot=slot, notes=notes, clear=clear)
 
 
@@ -478,8 +488,9 @@ async def ableton_find_samples(query: str = "", tipo: str | None = None, loops: 
 
 @mcp.tool(annotations=ADD)
 async def ableton_load_sample(track: int, ruta: str, pad: int | None = None) -> dict:
-    """Carga un sample en una pista MIDI. Sin pad: crea un Simpler (toca la nota 60). Con pad (36 kick,
-    39 clap, 42 hat cerrado, 46 hat abierto): lo pone en ese pad de un Drum Rack, creandolo si falta."""
+    """Carga un sample en una pista MIDI. Sin pad (lo normal: un sonido por pista): crea un Simpler (toca la
+    nota 60). Con pad (36 kick, 39 clap, 42 hat cerrado, 46 hat abierto): lo pone en ese pad de un Drum Rack,
+    creandolo si falta; solo si el usuario pide un Drum Rack."""
     ruta = os.path.normpath(ruta)
     for root, name in _user_folders().items():
         if ruta.lower().startswith(root.lower() + os.sep):

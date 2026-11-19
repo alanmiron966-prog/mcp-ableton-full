@@ -200,6 +200,16 @@ async def main():
     prof = await server.ableton_get_profile()
     assert [x["nombre"] for x in prof["perfil"]["proyectos"]] == ["Otro", "Tema UKG"] and prof["set_abierto"] == "Tema UKG"
     assert prof["perfil"]["proyectos"][-1]["pendiente"] == "master"
+    # bus kick+bass: la salida va a la pista por su nombre y el bus queda escuchando (monitor In)
+    a, b = song.tracks[0], song.tracks[1]
+    a.available_output_routing_types = [Obj(display_name="Master"), Obj(display_name=b.name)]
+    assert (await server.ableton_route_track(0, 1))["output"] == b.name and b.current_monitoring_state == 0
+    assert (await server.ableton_route_track(0, "master"))["output"] == "Master"
+    b.available_output_routing_types = [Obj(display_name="Master")]
+    try:
+        await server.ableton_route_track(1, 0); raise SystemExit("deberia fallar: destino no disponible")
+    except Exception as e:
+        assert "Opciones" in str(e), e
     # produccion: tempo/tonalidad, clip en un hueco que aun no existe (crea escena), notas, no pisar clips
     s = await server.ableton_set_song(tempo=126, key="f#", scale="Minor")
     assert (s["tempo"], s["key"], s["scale_name"]) == (126.0, "F#", "Minor")
