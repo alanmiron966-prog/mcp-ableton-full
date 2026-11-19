@@ -2,5 +2,5 @@
 __pycache__/
 referencia/
 *.asd
-graphify-out/cache/
-server/graphify-out/
+.mcp.json
+graphify-out/

@@ -17,11 +17,22 @@ solo en 127.0.0.1:9877.
 1. Cierra Live.
 2. `python install.py` copia el Remote Script a tu User Library y registra el servidor `ableton` en Claude Code.
 3. Abre Live > Preferencias > Link, Tempo & MIDI > Control Surface: **AbletonClaude**.
-4. En Claude Code, `/mcp` debe mostrar `ableton` conectado. Al primer uso Claude te pregunta nombre, generos
-   y temas de referencia.
+4. En Claude Code, `/mcp` debe mostrar `ableton` conectado.
 
-Opcional: `uv run --directory server python batch_presets.py` genera un Rack por cada VST3 con sus parametros
-expuestos, para que Claude pueda moverlos (los que pasan la prueba salen en `plugins_listos`).
+## Primer uso
+
+1. **Plugins** (`ableton_scan_plugins`, unos minutos con un set vacio abierto): escanea tus VST3, genera un
+   Rack por plugin con sus parametros expuestos y prueba cada uno en Live. Los que funcionan salen en
+   `plugins_listos`; los que cierran Live quedan en `no_usar` (si Live se cierra, abrelo y Claude sigue donde iba).
+2. **Perfil**: Claude te pregunta nombre, generos y 1-3 temas de referencia (archivos de audio).
+
+## Que hace
+
+- Pedir una cancion entrega el proyecto completo: produccion en el Arrangement (un sonido por pista, secciones
+  marcadas con `ableton_locators`), mezcla y master en el mismo set, medido contra tus referencias.
+  Guarda el set con nombre (Ctrl+S) antes de empezar: medir el master lo necesita.
+- Samples: escanea tus librerias y las busca por tipo (kick, clap, hat_closed...).
+- Si actualizas el Remote Script y no reinicias Live, `ableton_status` lo avisa.
 
 ## Medir el master sin exportar
 
@@ -38,3 +49,8 @@ la toma para `ableton_analyze_audio` o `ableton_compare_reference`.
 ## Pruebas
 
 `uv run --directory server python ../tests/test_sin_ableton.py` (no necesita Live).
+
+## Licencia
+
+MIT. Las ideas de marcadores y aviso de version vienen de
+[ahujasid/ableton-mcp](https://github.com/ahujasid/ableton-mcp) (MIT).
