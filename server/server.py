@@ -40,10 +40,8 @@ mcp = MCPServer(
         "cuando fue y lo pendiente) o empezar uno nuevo; si sigue y set_abierto es otro, pidele que abra ese set. "
         "Al acabar cada tarea y cuando el usuario se despida, apunta el avance con ableton_save_project. "
         "Al producir: cada sonido en su propia pista MIDI con su Simpler (kick, clap, hat cerrado, hat abierto, "
-        "perc... por separado, nunca juntos en un Drum Rack) para procesarlos aparte. Regla de oro: kick y bajo "
-        "siempre juntos dentro de un grupo de Live (Group Track; en list_tracks kind 'group' y 'group' en sus pistas). "
-        "La API no crea grupos: si no existe, crea las pistas Kick y Bass seguidas y pide al usuario que las "
-        "seleccione y pulse Ctrl+G. Nunca lo sustituyas por una pista de audio con salidas enrutadas."
+        "perc... por separado, nunca juntos en un Drum Rack) para procesarlos aparte. Kick y bajo tambien "
+        "en pistas separadas, sin agrupar ni enrutar a un bus."
     ),
 )
 
