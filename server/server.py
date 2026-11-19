@@ -118,10 +118,20 @@ async def ableton_status() -> dict:
 
 
 @mcp.tool(annotations=ADD)
-async def ableton_locators(add: list[dict] | None = None) -> list:
-    """Marcadores del Arrangement. add=[{"name": "Drop 1", "bar": 49}, ...] crea o renombra (compas 1 = inicio).
-    Sin add solo los lista. Marca cada seccion al producir una cancion."""
-    return await call_live("locators", add=add)
+async def ableton_locators(add: list[dict] | None = None, remove: list[float] | None = None) -> list:
+    """Marcadores del Arrangement. add=[{"name": "Drop 1", "bar": 49}, ...] crea o renombra (compas 1 = inicio);
+    remove=[49, ...] borra los de esos compases. Sin nada solo los lista. Marca cada seccion al producir."""
+    if not add and not remove:
+        return await call_live("locators")
+    back = (await call_live("status"))["bar"]
+    for _ in range(2 * (len(add or []) + len(remove or [])) + 1):  # como mucho un ciclo de cabezal por marcador
+        r = await call_live("locators", add=add, remove=remove)
+        if not (isinstance(r, dict) and "pendiente" in r):
+            break
+    else:
+        raise ToolError("Live no movio el cabezal al compas %s" % r["pendiente"])
+    await call_live("locators", seek_bar=back)
+    return r
 
 
 @mcp.tool(annotations=READ)

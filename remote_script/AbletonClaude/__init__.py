@@ -239,18 +239,30 @@ class AbletonClaude(ControlSurface):
         s = self.song()
         return s.signature_numerator * 4.0 / s.signature_denominator
 
-    def cmd_locators(self, add=None):
-        """Crea o renombra marcadores del Arrangement ({name, bar}) y devuelve todos."""
+    def cmd_locators(self, add=None, seek_bar=None, remove=None):
+        """Crea o renombra marcadores ({name, bar}) y devuelve todos. set_or_delete_cue actua en el cabezal y
+        Live aplica el movimiento del cabezal en el ciclo siguiente: si falta mover, lo mueve y devuelve
+        {"pendiente": bar} para que el servidor vuelva a llamar. seek_bar solo mueve el cabezal."""
         s = self.song()
         bb = self._bar_beats()
+        if seek_bar is not None:
+            s.current_song_time = (float(seek_bar) - 1) * bb
+            return {"bar": float(seek_bar)}
+        for bar in remove or []:  # mismo ciclo de cabezal que al crear; set_or_delete_cue sobre uno existente lo borra
+            t = (float(bar) - 1) * bb
+            if any(abs(c.time - t) < 1e-3 for c in s.cue_points):
+                if abs(s.current_song_time - t) > 1e-3:
+                    s.current_song_time = t
+                    return {"pendiente": float(bar)}
+                s.set_or_delete_cue()
         for loc in add or []:
             t = (float(loc["bar"]) - 1) * bb
             cue = next((c for c in s.cue_points if abs(c.time - t) < 1e-3), None)
-            if cue is None:  # set_or_delete_cue actua en el cabezal: moverlo, crear y devolverlo
-                back = s.current_song_time
-                s.current_song_time = t
+            if cue is None:
+                if abs(s.current_song_time - t) > 1e-3:
+                    s.current_song_time = t
+                    return {"pendiente": float(loc["bar"])}
                 s.set_or_delete_cue()
-                s.current_song_time = back
                 cue = next((c for c in s.cue_points if abs(c.time - t) < 1e-3), None)
                 if cue is None:
                     raise ValueError("Live no creo el marcador en el compas %s" % loc["bar"])

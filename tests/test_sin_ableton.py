@@ -158,6 +158,9 @@ async def main():
     assert locs == [{"name": "Intro", "bar": 1.0}, {"name": "Drop 1", "bar": 49.0}], locs
     assert (await server.ableton_locators(add=[{"name": "Drop", "bar": 49}]))[1] == {"name": "Drop", "bar": 49.0}
     assert len(song.cue_points) == 2 and song.current_song_time == 4.0
+    song.set_or_delete_cue = lambda: song.cue_points.remove(
+        next(c for c in song.cue_points if c.time == song.current_song_time))
+    assert await server.ableton_locators(remove=[1, 30]) == [{"name": "Drop", "bar": 49.0}]
     assert (await server.ableton_set_mixer(track=1, volume_db=-3))["volume"] == "-3.0 dB"
     tracks = await server.ableton_list_tracks()
     assert [t["name"] for t in tracks] == ["Kick", "Bass", "Main"] and tracks[1]["volume"] == "-3.0 dB"
