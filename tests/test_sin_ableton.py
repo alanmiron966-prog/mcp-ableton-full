@@ -147,6 +147,17 @@ server._user_folders = lambda: {LIB: "LIB"}
 async def main():
     st = await server.ableton_status()
     assert st["tempo"] == 126.0 and st["bar"] == 2.0
+    assert st["script"] and "aviso" not in st, st  # Live (falso) cargo el mismo script que el repo
+    real_script, rs.SCRIPT = rs.SCRIPT, "viejo"
+    assert "reinicia Live" in (await server.ableton_status())["aviso"]
+    rs.SCRIPT = real_script
+    # marcadores: set_or_delete_cue crea uno en el cabezal; se renombra si ya existe y el cabezal vuelve
+    song.cue_points = []
+    song.set_or_delete_cue = lambda: song.cue_points.append(Obj(time=song.current_song_time, name=""))
+    locs = await server.ableton_locators(add=[{"name": "Drop 1", "bar": 49}, {"name": "Intro", "bar": 1}])
+    assert locs == [{"name": "Intro", "bar": 1.0}, {"name": "Drop 1", "bar": 49.0}], locs
+    assert (await server.ableton_locators(add=[{"name": "Drop", "bar": 49}]))[1] == {"name": "Drop", "bar": 49.0}
+    assert len(song.cue_points) == 2 and song.current_song_time == 4.0
     assert (await server.ableton_set_mixer(track=1, volume_db=-3))["volume"] == "-3.0 dB"
     tracks = await server.ableton_list_tracks()
     assert [t["name"] for t in tracks] == ["Kick", "Bass", "Main"] and tracks[1]["volume"] == "-3.0 dB"

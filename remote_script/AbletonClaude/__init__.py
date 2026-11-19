@@ -1,6 +1,7 @@
 # AbletonClaude Remote Script: recibe comandos JSON por socket local y los ejecuta en el hilo principal de Live.
 from __future__ import absolute_import, print_function, unicode_literals
 
+import hashlib
 import json
 import queue
 import re
@@ -13,6 +14,18 @@ from _Framework.ControlSurface import ControlSurface
 
 HOST = "127.0.0.1"  # solo local: nadie de la red puede controlar Live
 PORT = 9877
+
+
+def _src_hash(path):
+    """Huella del codigo cargado; el servidor la compara con el repo para avisar de reiniciar Live."""
+    try:
+        with open(path[:-1] if path.endswith(".pyc") else path, "rb") as f:
+            return hashlib.sha1(f.read().replace(b"\r\n", b"\n")).hexdigest()[:12]
+    except (OSError, TypeError):
+        return None
+
+
+SCRIPT = _src_hash(__file__)  # se calcula al cargar: si luego se copia otro archivo, ya no coincide
 
 
 def create_instance(c_instance):
@@ -219,7 +232,31 @@ class AbletonClaude(ControlSurface):
         return {"tempo": s.tempo, "playing": s.is_playing, "tracks": len(s.tracks),
                 "returns": len(s.return_tracks), "time_signature": "%d/%d" % (s.signature_numerator, s.signature_denominator),
                 # compas del cabezal (1 = inicio); current_song_time va en negras
-                "bar": round(s.current_song_time / (s.signature_numerator * 4.0 / s.signature_denominator) + 1, 2)}
+                "bar": round(s.current_song_time / (s.signature_numerator * 4.0 / s.signature_denominator) + 1, 2),
+                "script": SCRIPT}
+
+    def _bar_beats(self):
+        s = self.song()
+        return s.signature_numerator * 4.0 / s.signature_denominator
+
+    def cmd_locators(self, add=None):
+        """Crea o renombra marcadores del Arrangement ({name, bar}) y devuelve todos."""
+        s = self.song()
+        bb = self._bar_beats()
+        for loc in add or []:
+            t = (float(loc["bar"]) - 1) * bb
+            cue = next((c for c in s.cue_points if abs(c.time - t) < 1e-3), None)
+            if cue is None:  # set_or_delete_cue actua en el cabezal: moverlo, crear y devolverlo
+                back = s.current_song_time
+                s.current_song_time = t
+                s.set_or_delete_cue()
+                s.current_song_time = back
+                cue = next((c for c in s.cue_points if abs(c.time - t) < 1e-3), None)
+                if cue is None:
+                    raise ValueError("Live no creo el marcador en el compas %s" % loc["bar"])
+            cue.name = str(loc["name"])
+        return sorted([{"name": c.name, "bar": round(c.time / bb + 1, 2)} for c in s.cue_points],
+                      key=lambda c: c["bar"])
 
     def cmd_list_tracks(self):
         return [self._track_info(r, t) for r, t in self._all_tracks()]

@@ -1,5 +1,6 @@
 """MCP server: puente entre Claude y el Remote Script AbletonClaude (socket local 127.0.0.1:9877)."""
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -27,7 +28,9 @@ mcp = MCPServer(
         "Controla Ableton Live abierto. Pistas: indice 0.., 'r0' para retornos, 'master'. "
         "Antes de tocar un plugin, mira sus parametros con ableton_device_params. "
         "Para valores reales usa display (ej. '250 Hz', '-3 dB'); el servidor convierte. "
-        "Al empezar llama a ableton_get_profile. Si plugins_pendientes es true (instalacion nueva o plugins sin "
+        "Al empezar llama a ableton_status: si trae 'aviso', diselo al usuario antes de seguir. "
+        "Al producir, marca las secciones (intro, break, drop, outro) con ableton_locators. "
+        "Luego llama a ableton_get_profile. Si plugins_pendientes es true (instalacion nueva o plugins sin "
         "probar), lo primero, antes del onboarding: avisa que vas a analizar sus plugins (unos minutos, con un set "
         "vacio abierto) y llama a ableton_scan_plugins; si Live se cierra con un plugin, que lo abra y vuelve a "
         "llamarla. Despues, si configurado es false, haz el onboarding preguntando solo lo que "
@@ -82,14 +85,43 @@ async def call_live(type_: str, **params: Any) -> Any:
         raise ToolError("Ableton cerro la conexion sin responder.")
     resp = json.loads(line)
     if not resp.get("ok"):
-        raise ToolError(resp.get("error", "Error desconocido en Ableton"))
+        err = resp.get("error", "Error desconocido en Ableton")
+        if err.startswith("Comando desconocido"):
+            err += ". Live tiene cargado un Remote Script viejo: reinicia Live."
+        raise ToolError(err)
     return resp["result"]
+
+
+REPO_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "remote_script", "AbletonClaude",
+                           "__init__.py")
+
+
+def _script_aviso(status: dict) -> str | None:
+    """Aviso si el Remote Script que tiene Live no es el del repo (se copio uno nuevo y Live no se reinicio)."""
+    try:
+        with open(REPO_SCRIPT, "rb") as f:
+            repo = hashlib.sha1(f.read().replace(b"\r\n", b"\n")).hexdigest()[:12]
+    except OSError:
+        return None  # instalado sin el repo: nada con que comparar
+    if status.get("script") != repo:
+        return "Live tiene cargada otra version del Remote Script: copia la nueva (python install.py) y reinicia Live."
+    return None
 
 
 @mcp.tool(annotations=READ)
 async def ableton_status() -> dict:
-    """Tempo, si esta sonando, compas, posicion del cabezal (bar) y numero de pistas del proyecto abierto."""
-    return await call_live("status")
+    """Tempo, si esta sonando, compas, posicion del cabezal (bar) y numero de pistas del proyecto abierto.
+    Trae 'aviso' si Live tiene cargado un Remote Script distinto del instalado."""
+    st = await call_live("status")
+    aviso = _script_aviso(st)
+    return {**st, "aviso": aviso} if aviso else st
+
+
+@mcp.tool(annotations=ADD)
+async def ableton_locators(add: list[dict] | None = None) -> list:
+    """Marcadores del Arrangement. add=[{"name": "Drop 1", "bar": 49}, ...] crea o renombra (compas 1 = inicio).
+    Sin add solo los lista. Marca cada seccion al producir una cancion."""
+    return await call_live("locators", add=add)
 
 
 @mcp.tool(annotations=READ)
