@@ -27,7 +27,10 @@ mcp = MCPServer(
         "Controla Ableton Live abierto. Pistas: indice 0.., 'r0' para retornos, 'master'. "
         "Antes de tocar un plugin, mira sus parametros con ableton_device_params. "
         "Para valores reales usa display (ej. '250 Hz', '-3 dB'); el servidor convierte. "
-        "Al empezar llama a ableton_get_profile: si configurado es false, haz el onboarding preguntando solo lo que "
+        "Al empezar llama a ableton_get_profile. Si plugins_pendientes es true (instalacion nueva o plugins sin "
+        "probar), lo primero, antes del onboarding: avisa que vas a analizar sus plugins (unos minutos, con un set "
+        "vacio abierto) y llama a ableton_scan_plugins; si Live se cierra con un plugin, que lo abra y vuelve a "
+        "llamarla. Despues, si configurado es false, haz el onboarding preguntando solo lo que "
         "este en 'falta', una pregunta cada vez y en este orden: nombre artistico; generos; bpm (recomienda tu un rango "
         "tipico del genero, ej. UK garage 130-138, tech house 124-128, techno 130-140, y que elija); 3 artistas de "
         "referencia (para entender su sonido); 1-3 temas de referencia (enlace de YouTube o ruta de un archivo de audio) "
@@ -543,13 +546,94 @@ def _inventory() -> dict:
     return {"plugins_listos": ready, "no_usar": bad}
 
 
+TESTS = os.path.join(HOME, "rack_tests.json")
+SKIP_PARAMS = ("device on", "bypass")
+
+
+async def _test_rack(name: str) -> dict:
+    """Carga el Rack en una pista temporal, mueve un parametro y mira si el valor visible cambia."""
+    t = (await call_live("create_track", kind="audio", name="Claude test"))["index"]
+    try:
+        await call_live("load_device", track=t, name=name, source="user_library")
+        for _ in range(40):  # load_item es asincrono en Live
+            if (await call_live("list_tracks"))[t]["devices"]:
+                break
+            await asyncio.sleep(0.5)
+        else:
+            return {"status": "no carga"}
+        d = await call_live("device_params", track=t, device=0)
+        ps = [p for p in d["params"] if p["name"].lower() not in SKIP_PARAMS and p["max"] > p["min"]]
+        p = next((p for p in ps if not p["quantized"]), ps[0] if ps else None)
+        if p is None:
+            return {"device": d["device"], "class": d["class"], "status": "sin parametro movible"}
+        v = p["min"] + (p["max"] - p["min"]) * (0.25 if p["value"] > (p["min"] + p["max"]) / 2 else 0.75)
+        await call_live("set_device_param", track=t, device=0, param=p["index"], value=v)
+        after = (await call_live("device_params", track=t, device=0))["params"][p["index"]]["display"]
+        return {"device": d["device"], "class": d["class"], "params": len(d["params"]), "param": p["name"],
+                "antes": p["display"], "despues": after,
+                "status": "ok" if after != p["display"] else "el parametro no se mueve"}
+    finally:
+        if (await call_live("list_tracks"))[t]["name"] == "Claude test":  # no borrar una pista del usuario
+            await call_live("delete_track", track=t)
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                      openWorldHint=False))
+async def ableton_scan_plugins(reescanear: bool = False) -> dict:
+    """Primer paso de una instalacion nueva: escanea los VST3, genera su Rack en Claude Presets y prueba cada uno
+    en Live (pista temporal 'Claude test' que se borra). Tarda minutos; usa un set vacio. Si Live se cierra con un
+    plugin, vuelve a llamarla: ese plugin queda en no_usar y sigue con el resto. reescanear=True rehace el escaneo."""
+    if reescanear or not os.path.exists(os.path.join(HOME, "plugins.json")):
+        proc = await asyncio.create_subprocess_exec(sys.executable, os.path.join(os.path.dirname(__file__),
+                                                                                 "batch_presets.py"),
+                                                    stdout=asyncio.subprocess.DEVNULL)
+        await proc.wait()
+    tests = _load(TESTS, {})
+    for k, v in tests.items():
+        if v.get("status") == "probando":  # la ultima vez Live se cerro con este plugin
+            tests[k] = {"status": "cierra Live"}
+    names = [_safe(r["name"]) for r in _load(os.path.join(HOME, "plugins.json"), []) if r.get("status") == "ok"]
+    for name in names:
+        if name in tests and not reescanear:
+            continue
+        familia = " ".join(name.split()[:2])
+        if any(" ".join(k.split()[:2]) == familia and v["status"].startswith("cierra Live") for k, v in tests.items()):
+            tests[name] = {"status": "cierra Live (misma familia)"}  # no tumbar Live una vez por cada Ozone
+            continue
+        tests[name] = {"status": "probando"}
+        _save_json(TESTS, tests)  # si Live se cae aqui, la marca dice que plugin fue
+        t0 = time.time()
+        try:
+            tests[name] = dict(await _test_rack(name), s=round(time.time() - t0, 1))
+        except ToolError as e:
+            if "No conecto" in str(e) or "cerro la conexion" in str(e):
+                tests[name] = {"status": "cierra Live"}
+                _save_json(TESTS, tests)
+                raise ToolError("Live se cerro al cargar '%s'. Abre Live y vuelve a llamar a ableton_scan_plugins: "
+                                "sigue donde quedo." % name)
+            tests[name] = {"status": "error: %s" % e}
+        _save_json(TESTS, tests)
+    _save_json(TESTS, tests)  # tambien las marcas de familia y de 'probando'
+    return _inventory()
+
+
+def _save_json(path: str, data: Any) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    os.replace(path + ".tmp", path)
+
+
 @mcp.tool(annotations=READ)
 async def ableton_get_profile() -> dict:
     """Perfil del usuario (nombre, generos, bpm, artistas, referencias) y los plugins listos para usar, por categoria."""
     p = _load(PROFILE, {})
     falta = [k for k in ("nombre", "generos", "bpm", "artistas", "referencias") if not p.get(k)]
-    return {"configurado": not falta, "falta": falta, "perfil": p, "set_abierto": await asyncio.to_thread(_set_name),
-            **_inventory(), "samples": _library_summary()}
+    inv = _inventory()
+    sin_probar = sum(1 for x in inv["no_usar"] if x["estado"] in ("sin probar", "probando"))
+    return {"plugins_pendientes": not os.path.exists(os.path.join(HOME, "plugins.json")) or sin_probar > 0,
+            "configurado": not falta, "falta": falta, "perfil": p, "set_abierto": await asyncio.to_thread(_set_name),
+            **inv, "samples": _library_summary()}
 
 
 def _set_name() -> str | None:

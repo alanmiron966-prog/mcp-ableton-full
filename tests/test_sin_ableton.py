@@ -293,6 +293,59 @@ async def main():
     assert not song.tracks[0].clip_slots[2].has_clip
 
 asyncio.run(main())
+
+
+async def scan_plugins():
+    """ableton_scan_plugins con un Live falso: prueba lo pendiente, borra su pista y apunta el plugin que cierra Live."""
+    with open(os.path.join(TMP, "plugins.json"), "w") as f:
+        json.dump([{"name": n, "sub": "Fx|EQ", "status": "ok"} for n in ("Pro-Q 4", "Nuevo", "Peta 9 A", "Peta 9 B")], f)
+    with open(os.path.join(TMP, "rack_tests.json"), "w") as f:
+        json.dump({"Pro-Q 4": {"status": "ok"}}, f)
+    tracks, param = [], {"value": 0.0}
+
+    async def fake(type_, **k):
+        if type_ == "create_track":
+            tracks.append({"name": k["name"], "devices": []})
+            return {"index": len(tracks) - 1}
+        if type_ == "load_device":
+            if k["name"] == "Peta 9 A":
+                raise server.ToolError("Ableton cerro la conexion sin responder.")
+            tracks[k["track"]]["devices"] = [k["name"]]
+            return {}
+        if type_ == "list_tracks":
+            return tracks
+        if type_ == "device_params":
+            return {"device": "Nuevo", "class": "PluginDevice", "params": [
+                {"index": 0, "name": "Device On", "value": 1, "min": 0, "max": 1, "display": "On", "quantized": True},
+                {"index": 1, "name": "Gain", "value": param["value"], "min": 0, "max": 1,
+                 "display": "%.2f" % param["value"], "quantized": False}]}
+        if type_ == "set_device_param":
+            param["value"] = k["value"]
+            return {}
+        if type_ == "delete_track":
+            tracks.pop(k["track"])
+            return {}
+        raise AssertionError(type_)
+    real, server.call_live = server.call_live, fake
+    try:
+        assert (await server.ableton_get_profile())["plugins_pendientes"]
+        try:
+            await server.ableton_scan_plugins()
+            raise AssertionError("tenia que avisar que Live se cerro")
+        except server.ToolError as e:
+            assert "Peta 9 A" in str(e)
+        t = json.load(open(os.path.join(TMP, "rack_tests.json")))
+        assert t["Nuevo"]["status"] == "ok" and t["Nuevo"]["param"] == "Gain" and t["Peta 9 A"]["status"] == "cierra Live", t
+        inv = await server.ableton_scan_plugins()  # segunda vuelta: no repite nada
+        assert inv["plugins_listos"] == {"EQ": ["Pro-Q 4", "Nuevo"]}, inv
+        assert inv["no_usar"] == [{"plugin": "Peta 9 A", "estado": "cierra Live"},
+                                  {"plugin": "Peta 9 B", "estado": "cierra Live (misma familia)"}], inv
+        assert not (await server.ableton_get_profile())["plugins_pendientes"]
+    finally:
+        server.call_live = real
+
+
+asyncio.run(scan_plugins())
 surface.disconnect()
 
 # generador de presets: plugin dentro del Rack, con estado, parametros elegidos e Ids unicos
