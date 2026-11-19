@@ -406,6 +406,41 @@ def _library_summary() -> dict:
             "librerias": dict(sorted(libs.items(), key=lambda kv: -kv[1]))}
 
 
+_secs: dict = {}
+SHOT_MAX = 3.0  # un golpe de kick/bajo/perc mas largo es casi seguro un loop sin "loop" en el nombre
+LONG_OK = {"vocal", "fx", "cymbal", "otro"}
+
+
+def _wav_seconds(path: str) -> float | None:
+    """Duracion leyendo solo la cabecera RIFF (byte rate y tamano de 'data'). None si no es wav legible."""
+    if path not in _secs:
+        d = None
+        try:
+            with open(path, "rb") as f:
+                if f.read(12)[8:] == b"WAVE":
+                    rate = None
+                    while (h := f.read(8)) and len(h) == 8:
+                        cid, size = h[:4], int.from_bytes(h[4:], "little")
+                        if cid == b"fmt ":
+                            rate = int.from_bytes(f.read(size)[8:12], "little")
+                        elif cid == b"data":
+                            d = size / rate if rate else None
+                            break
+                        else:
+                            f.seek(size + (size & 1), 1)
+        except OSError:
+            pass
+        _secs[path] = d
+    return _secs[path]
+
+
+def _is_loop(s: dict) -> bool:
+    if s["loop"] or s["tipo"] in LONG_OK:
+        return s["loop"]
+    d = _wav_seconds(s["ruta"])
+    return d is not None and d > SHOT_MAX
+
+
 @mcp.tool(annotations=READ)
 async def ableton_scan_samples() -> dict:
     """Reescanea las carpetas de Places (si el usuario anadio librerias) y devuelve el resumen por tipo y libreria."""
@@ -418,15 +453,20 @@ async def ableton_find_samples(query: str = "", tipo: str | None = None, loops: 
                                bpm: int | None = None, limit: int = 30) -> list:
     """Busca samples ya clasificados. tipo: kick, clap, snare, hat_closed, hat_open, cymbal, perc, bass, synth,
     vocal, fx, drums (loops/fills de bateria completa), otro. query filtra por palabras en la ruta ('tech house', 'toolroom'). loops=False solo one-shots,
-    True solo loops. bpm filtra loops a +-2. Prioriza los generos del perfil."""
+    True solo loops (un golpe de mas de 3 s cuenta como loop). seg = duracion. bpm filtra loops a +-2. Prioriza los generos del perfil."""
     words = query.lower().split()
     generos = [g.lower() for g in _load(PROFILE, {}).get("generos", [])]
     hits = [s for s in _sample_index()
-            if (tipo is None or s["tipo"] == tipo) and s["loop"] == loops
+            if (tipo is None or s["tipo"] == tipo)
             and (bpm is None or (s["bpm"] and abs(s["bpm"] - bpm) <= 2))
-            and all(w in s["ruta"].lower() for w in words)]
+            and all(w in s["ruta"].lower() for w in words) and _is_loop(s) == loops]
     hits.sort(key=lambda s: -sum(g in s["ruta"].lower() for g in generos))
-    return [{k: v for k, v in s.items() if v is not None} for s in hits[:limit]]
+    out = []
+    for s in hits[:limit]:
+        d = _wav_seconds(s["ruta"])
+        out.append({**{k: v for k, v in s.items() if v is not None}, "loop": loops,
+                    **({"seg": round(d, 2)} if d else {})})
+    return out
 
 
 @mcp.tool(annotations=ADD)

@@ -307,4 +307,12 @@ livepaths.library_cfg = lambda: ('<UserLibrary>\n\t<LibraryProject Id="4">\n\t\t
 assert livepaths.user_library() == os.path.normpath("C:/x/libs/User Library"), livepaths.user_library()
 livepaths.library_cfg = lambda: ""
 assert livepaths.user_library() is None
+# un "Bass" de 5.76 s sin 'loop' en el nombre es un loop; uno de 0.5 s es un golpe
+import wave  # noqa: E402
+for secs in (5.76, 0.5):
+    p = os.path.join(tempfile.mkdtemp(), "Bass_003_C.wav")
+    with wave.open(p, "wb") as w:
+        w.setnchannels(2), w.setsampwidth(3), w.setframerate(44100), w.writeframes(b"\0" * 6 * int(44100 * secs))
+    assert abs(server._wav_seconds(p) - secs) < 0.01
+    assert server._is_loop({"ruta": p, "tipo": "bass", "loop": False}) == (secs > 3)
 print("OK: todas las pruebas pasaron")

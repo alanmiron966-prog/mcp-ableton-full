@@ -18,9 +18,9 @@
     "semantic_hash": "e25bb619c73d5389cd017ffebccd2e02"
   },
   "remote_script/AbletonClaude/__init__.py": {
-    "mtime": 1794449059.7055507,
-    "seen": 1794449115.056312,
-    "ast_hash": "90acd88a387711cee36cc79c71d7e813",
+    "mtime": 1794512031.502668,
+    "seen": 1794512059.9290788,
+    "ast_hash": "ea5bd4747ccaa87b5ad1d7a059daaa7b",
     "semantic_hash": ""
   },
   "server/analysis.py": {
@@ -30,10 +30,10 @@
     "semantic_hash": "dd2c73c71cae5eba384d2ba4856d8c59"
   },
   "server/batch_presets.py": {
-    "mtime": 1794439282.0244503,
-    "seen": 1794446450.642649,
-    "ast_hash": "5b85ae823b2ff49ee5f5227613167e43",
-    "semantic_hash": "5b85ae823b2ff49ee5f5227613167e43"
+    "mtime": 1794708762.1170497,
+    "seen": 1794708821.5632513,
+    "ast_hash": "f980ae5d978106925321fbe3af7fa334",
+    "semantic_hash": ""
   },
   "server/preset_gen.py": {
     "mtime": 1794436637.3754518,
@@ -48,9 +48,9 @@
     "semantic_hash": "cc60c4a7178000b445c0af40872970c6"
   },
   "server/server.py": {
-    "mtime": 1794449072.9235437,
-    "seen": 1794449115.0567467,
-    "ast_hash": "4ecaa548e3f5be28d50f7b11c7a772a4",
+    "mtime": 1794713272.4909954,
+    "seen": 1794713365.0155365,
+    "ast_hash": "0a0afb8841a8045b4ea29855e1673c1a",
     "semantic_hash": ""
   },
   "server/vst3_scan.py": {
@@ -60,22 +60,10 @@
     "semantic_hash": "53f48fda310bf93f3c2ca0d6d1022e0a"
   },
   "tests/test_sin_ableton.py": {
-    "mtime": 1794449101.9633803,
-    "seen": 1794449115.0568516,
-    "ast_hash": "b65ca7722802a7fbeffba873ba9c5143",
+    "mtime": 1794713281.0096934,
+    "seen": 1794713365.015542,
+    "ast_hash": "f8c79cf9411b121c2b49bf82ef88dd01",
     "semantic_hash": ""
-  },
-  "referencia/How Ya Feelin (YouTube).wav": {
-    "mtime": 1794445224.7294946,
-    "seen": 1794446450.6426673,
-    "ast_hash": "d5b6e9c199161a0aae99eac3434a0539",
-    "semantic_hash": "d5b6e9c199161a0aae99eac3434a0539"
-  },
-  "referencia/How Ya Feelin\u2019.mp4": {
-    "mtime": 1794444841.2234893,
-    "seen": 1794446450.6426723,
-    "ast_hash": "de27e4073bf8d5db7c7cf3bdcb5933a2",
-    "semantic_hash": "de27e4073bf8d5db7c7cf3bdcb5933a2"
   },
   ".claude/skills/mcp-builder/LICENSE.txt": {
     "mtime": 1794430586.4942775,
@@ -123,6 +111,24 @@
     "mtime": 1794430586.3315902,
     "seen": 1794447125.7867746,
     "ast_hash": "6b5eb2873ee0dd7a24a96d89cced5c38",
+    "semantic_hash": ""
+  },
+  "install.py": {
+    "mtime": 1794708770.0345223,
+    "seen": 1794708821.563235,
+    "ast_hash": "11764eeb97b375516b631e7f3fd0af15",
+    "semantic_hash": ""
+  },
+  "server/livepaths.py": {
+    "mtime": 1794708754.3389833,
+    "seen": 1794708821.563255,
+    "ast_hash": "31f1dba06df458ca2e7ae2752de4f75f",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1794708800.872875,
+    "seen": 1794708821.5635624,
+    "ast_hash": "be659d2e6e1499c5a50a89ac1537024d",
     "semantic_hash": ""
   }
 }
