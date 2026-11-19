@@ -35,7 +35,10 @@ mcp = MCPServer(
         "get_profile tambien trae el resumen de samples y librerias (escaneadas al conectar): para elegir sonidos "
         "usa ableton_find_samples con tipo (kick, clap, hat_closed...) antes que palabras sueltas. "
         "Antes del master, si perfil.notas no lo dice ya, pregunta si quiere exportar la mezcla y masterizar "
-        "aparte o masterizar en la misma sesion, y guarda la respuesta en notas con ableton_set_profile."
+        "aparte o masterizar en la misma sesion, y guarda la respuesta en notas con ableton_set_profile. "
+        "Si perfil.proyectos tiene alguno, al empezar pregunta antes de nada: seguir con el ultimo (di su nombre, "
+        "cuando fue y lo pendiente) o empezar uno nuevo; si sigue y set_abierto es otro, pidele que abra ese set. "
+        "Al acabar cada tarea y cuando el usuario se despida, apunta el avance con ableton_save_project."
     ),
 )
 
@@ -534,7 +537,38 @@ async def ableton_get_profile() -> dict:
     """Perfil del usuario (nombre, generos, bpm, artistas, referencias) y los plugins listos para usar, por categoria."""
     p = _load(PROFILE, {})
     falta = [k for k in ("nombre", "generos", "bpm", "artistas", "referencias") if not p.get(k)]
-    return {"configurado": not falta, "falta": falta, "perfil": p, **_inventory(), "samples": _library_summary()}
+    return {"configurado": not falta, "falta": falta, "perfil": p, "set_abierto": await asyncio.to_thread(_set_name),
+            **_inventory(), "samples": _library_summary()}
+
+
+def _set_name() -> str | None:
+    """Nombre del set abierto, del titulo de la ventana de Live ('Nombre* - Ableton Live 12 Suite').
+    None si Live esta cerrado, no es Windows o el set no tiene nombre todavia."""
+    if os.name != "nt":
+        return None  # shortcut: solo Windows lee el titulo; en Mac pasar nombre a mano
+    r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; (Get-Process 'Ableton Live 1*' "
+                        "-ErrorAction SilentlyContinue | ? MainWindowTitle | select -First 1).MainWindowTitle"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    name = r.stdout.strip().split(" - Ableton Live")[0].rstrip("*").strip()
+    return None if name.lower() in ("", "untitled", "sin título", "sin titulo") else name
+
+
+@mcp.tool(annotations=WRITE)
+async def ableton_save_project(resumen: str, pendiente: str = "", nombre: str | None = None) -> dict:
+    """Apunta en que va un proyecto para retomarlo otro dia. resumen: que se hizo (genero, bpm, tonalidad, que
+    suena ya). pendiente: el siguiente paso. nombre: por defecto el del set abierto en Live; si el set no tiene
+    nombre, pide al usuario que lo guarde (Ctrl+S) o pasa uno. Reemplaza la nota anterior del mismo proyecto."""
+    nombre = nombre or await asyncio.to_thread(_set_name)
+    if not nombre:
+        raise ToolError("El set no tiene nombre: pide al usuario que lo guarde con Ctrl+S o pasa nombre")
+    p = _load(PROFILE, {})
+    projs = [x for x in p.get("proyectos", []) if x["nombre"].lower() != nombre.lower()]
+    projs.append({"nombre": nombre, "fecha": time.strftime("%Y-%m-%d %H:%M"), "resumen": resumen, "pendiente": pendiente})
+    p["proyectos"] = projs[-10:]  # el ultimo es el mas reciente
+    _save_profile(p)
+    return projs[-1]
 
 
 @mcp.tool(annotations=WRITE)

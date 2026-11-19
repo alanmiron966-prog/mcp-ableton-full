@@ -187,6 +187,19 @@ async def main():
     await server.ableton_add_reference("https://youtu.be/x", nota="bombo")
     r = (await server.ableton_get_profile())["perfil"]["referencias"][-1]
     assert r == {"ruta": "https://youtu.be/x", "nota": "bombo", "titulo": "Tema", "medicion": m}, r
+    # proyectos: sin nombre de set falla; el mismo proyecto se reemplaza y el ultimo queda al final
+    server._set_name = lambda: None
+    try:
+        await server.ableton_save_project("x"); raise SystemExit("deberia pedir nombre")
+    except Exception as e:
+        assert "Ctrl+S" in str(e), e
+    server._set_name = lambda: "Tema UKG"
+    await server.ableton_save_project("bombo y bajo", pendiente="voces")
+    await server.ableton_save_project("bombo, bajo y voces", nombre="Otro")
+    await server.ableton_save_project("drop listo", pendiente="master")
+    prof = await server.ableton_get_profile()
+    assert [x["nombre"] for x in prof["perfil"]["proyectos"]] == ["Otro", "Tema UKG"] and prof["set_abierto"] == "Tema UKG"
+    assert prof["perfil"]["proyectos"][-1]["pendiente"] == "master"
     # produccion: tempo/tonalidad, clip en un hueco que aun no existe (crea escena), notas, no pisar clips
     s = await server.ableton_set_song(tempo=126, key="f#", scale="Minor")
     assert (s["tempo"], s["key"], s["scale_name"]) == (126.0, "F#", "Minor")
