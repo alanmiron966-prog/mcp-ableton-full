@@ -419,6 +419,7 @@ class AbletonClaude(ControlSurface):
         if name:
             c.name = name
         res = self._write_notes(c, notes)
+        Live.Application.get_application().view.show_view("Arranger")  # que el usuario vea lo que se dibuja
         res.update(track=t.name, start=c.start_time, end=c.end_time, name=c.name)
         return res
 

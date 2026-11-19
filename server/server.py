@@ -41,7 +41,8 @@ mcp = MCPServer(
         "Al acabar cada tarea y cuando el usuario se despida, apunta el avance con ableton_save_project. "
         "Al producir: cada sonido en su propia pista MIDI con su Simpler (kick, clap, hat cerrado, hat abierto, "
         "perc... por separado, nunca juntos en un Drum Rack) para procesarlos aparte. Kick y bajo tambien "
-        "en pistas separadas, sin agrupar ni enrutar a un bus."
+        "en pistas separadas, sin agrupar ni enrutar a un bus. Produce siempre en el Arrangement: dibuja los MIDI "
+        "con ableton_arrange_clip, nunca clips de Session (create_clip/add_notes solo si el usuario lo pide)."
     ),
 )
 
@@ -183,7 +184,8 @@ async def ableton_set_song(tempo: float | None = None, numerator: int | None = N
 @mcp.tool(annotations=ADD)
 async def ableton_create_clip(track: int, slot: int = 0, bars: float = 4, name: str | None = None,
                               replace: bool = False) -> dict:
-    """Crea un clip MIDI vacio en una pista MIDI (hueco = escena, 0..). bars en compases de 4/4.
+    """Crea un clip MIDI vacio en la vista Session (hueco = escena, 0..). Solo si el usuario pide Session:
+    para producir usa ableton_arrange_clip. bars en compases de 4/4.
     replace=True borra el clip que haya en ese hueco: confirma con el usuario si no lo creaste tu."""
     return await call_live("create_clip", track=track, slot=slot, length=bars * 4, name=name, replace=replace)
 

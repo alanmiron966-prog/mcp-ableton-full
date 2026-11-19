@@ -98,6 +98,7 @@ class Slot:
 
 
 sys.modules["Live"].Clip = Obj(MidiNoteSpecification=lambda **kw: Obj(**kw))
+sys.modules["Live"].Application = Obj(get_application=lambda: Obj(view=Obj(show_view=lambda name: None)))
 
 
 def track(name):
