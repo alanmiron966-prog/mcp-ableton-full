@@ -22,9 +22,29 @@ PROFILE = os.path.join(HOME, "perfil.json")
 PRESETS = os.environ.get("ABLETON_CLAUDE_PRESETS", os.path.join(livepaths.user_library() or HOME, "Claude Presets"))
 AUDIO_EXT = (".wav", ".mp3", ".flac", ".aif", ".aiff", ".m4a", ".ogg")
 
+# "Mezcla en una orden": la misma receta sirve al prompt /mezclar y a "mezcla mi track" escrito a mano.
+MEZCLA = (
+    "Mezcla el track abierto entero, sin parar a preguntar entre pasos, en este orden:\n"
+    "1) ableton_status, ableton_get_profile y ableton_list_tracks. Si set_abierto es null, pide Ctrl+S con nombre y espera. "
+    "Clasifica cada pista por su nombre y dispositivos: kick, bajo, bateria (clap, hats, perc), synths/lead, pads, voz, fx.\n"
+    "2) Niveles: pon los faders a 0 dB, reproduce desde el drop (ableton_locators o el tramo mas lleno) y mide 4 s con "
+    "ableton_meters. Baja (no subas) cada pista con ableton_set_mixer hasta que el kick sea lo mas alto (~0.80), el bajo "
+    "justo debajo y el resto por debajo del bajo; el master nunca por encima de 0.90. Vuelve a medir para comprobarlo.\n"
+    "3) EQ (de plugins_listos, si no EQ Eight): filtro paso alto en todo menos kick y bajo (30-40 Hz en bajo; 150-250 Hz en "
+    "hats, synths, pads y voz), recorte suave de 2-3 dB en 250-400 Hz en pads y synths, y en el bajo deja hueco al kick.\n"
+    "4) Bombeo con el kick: si el compresor permite elegir la fuente de sidechain, ponlo en bajo y pads y avisa de que "
+    "la fuente (Kick) se elige con un clic; si no, Auto Pan en modo tremolo sincronizado a 1/4 en bajo y pads.\n"
+    "5) Espacio: un retorno con reverb y otro con delay si no existen; envios a pads, synths, voz y clap (nunca a kick ni "
+    "bajo). Paneo: kick, bajo y voz al centro; hats y percusion +-0.2 a 0.4; capas de synth repartidas.\n"
+    "6) Comprueba: ableton_record_master, ableton_reload_set y ableton_compare_reference (o ableton_analyze_audio si no "
+    "hay referencias). Corrige lo que salga en 'notas' y repite una vez.\n"
+    "7) Guarda con ableton_save_project y resume en 5 lineas: que cambiaste en cada pista y que no pudiste comprobar."
+)
+
 mcp = MCPServer(
     "ableton_mcp",
     instructions=(
+        "Si piden mezclar el track (\"mezcla mi track\", \"mezclalo\"), sigue esta receta:\n" + MEZCLA + "\n"
         "Controla Ableton Live abierto. Pistas: indice 0.., 'r0' para retornos, 'master'. "
         "Antes de tocar un plugin, mira sus parametros con ableton_device_params. "
         "Para valores reales usa display (ej. '250 Hz', '-3 dB'); el servidor convierte. "
@@ -791,6 +811,11 @@ async def ableton_compare_reference(ruta: str, referencia: int = 0) -> dict:
     mix, ref = await asyncio.gather(asyncio.to_thread(_measure, ruta),
                                     asyncio.to_thread(lambda: r.get("medicion") or _measure(r["ruta"])))
     return {"mezcla": mix, "referencia": ref, "diferencia": analysis.compare(mix, ref)}
+
+
+@mcp.prompt(title="Mezcla en una orden", description="Mezcla el track abierto en Ableton de principio a fin.")
+def mezclar() -> str:
+    return MEZCLA
 
 
 if __name__ == "__main__":

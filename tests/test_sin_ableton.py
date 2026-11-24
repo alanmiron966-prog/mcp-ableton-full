@@ -145,6 +145,8 @@ server._user_folders = lambda: {LIB: "LIB"}
 
 
 async def main():
+    assert "mezclar" in [p.name for p in await server.mcp.list_prompts()]
+    assert "ableton_meters" in server.MEZCLA and server.MEZCLA in server.mcp.instructions
     st = await server.ableton_status()
     assert st["tempo"] == 126.0 and st["bar"] == 2.0
     assert st["script"] and "aviso" not in st, st  # Live (falso) cargo el mismo script que el repo

@@ -33,6 +33,8 @@ solo en 127.0.0.1:9877.
 - Pedir una cancion entrega el proyecto completo: produccion en el Arrangement (un sonido por pista, secciones
   marcadas con `ableton_locators`), mezcla y master en el mismo set, medido contra tus referencias.
   Guarda el set con nombre (Ctrl+S) antes de empezar: medir el master lo necesita.
+- **Mezcla en una orden**: escribe "mezcla mi track" (o usa el prompt `/mezclar`) y Claude ajusta niveles,
+  EQ, bombeo con el kick, reverb/delay y paneo, y lo comprueba midiendo el master contra tu referencia.
 - Samples: escanea tus librerias y las busca por tipo (kick, clap, hat_closed...).
 - Si actualizas el Remote Script y no reinicias Live, `ableton_status` lo avisa.
 
