@@ -20,12 +20,13 @@ PORT = int(os.environ.get("ABLETON_CLAUDE_PORT", "9877"))
 HOME = os.environ.get("ABLETON_CLAUDE_HOME", os.path.join(os.path.expanduser("~"), ".ableton-mcp"))
 PROFILE = os.path.join(HOME, "perfil.json")
 PRESETS = os.environ.get("ABLETON_CLAUDE_PRESETS", os.path.join(livepaths.user_library() or HOME, "Claude Presets"))
+MAC = sys.platform == "darwin"
 AUDIO_EXT = (".wav", ".mp3", ".flac", ".aif", ".aiff", ".m4a", ".ogg")
 
 # "Mezcla en una orden": la misma receta sirve al prompt /mezclar y a "mezcla mi track" escrito a mano.
 MEZCLA = (
     "Mezcla el track abierto entero, sin parar a preguntar entre pasos, en este orden:\n"
-    "1) ableton_status, ableton_get_profile y ableton_list_tracks. Si set_abierto es null, pide Ctrl+S con nombre y espera. "
+    "1) ableton_status, ableton_get_profile y ableton_list_tracks. Si set_abierto es null, pide Ctrl+S (Cmd+S en Mac) con nombre y espera. "
     "Clasifica cada pista por su nombre y dispositivos: kick, bajo, bateria (clap, hats, perc), synths/lead, pads, voz, fx.\n"
     "2) Niveles: pon los faders a 0 dB, reproduce desde el drop (ableton_locators o el tramo mas lleno) y mide 4 s con "
     "ableton_meters. Baja (no subas) cada pista con ableton_set_mixer hasta que el kick sea lo mas alto (~0.80), el bajo "
@@ -73,7 +74,7 @@ mcp = MCPServer(
         "cancion entera (intro, breaks sin kick, drops, outro), 2) mezcla (EQ, sidechain, reverb/delay, paneo, "
         "niveles), 3) master en el Main medido contra la referencia con ableton_record_master y "
         "ableton_compare_reference. Como medir exige el set guardado, al empezar pide que lo guarde con nombre "
-        "(Ctrl+S) si set_abierto es null. Al final resume que se hizo y que no se pudo comprobar."
+        "(Ctrl+S o Cmd+S en Mac) si set_abierto es null. Al final resume que se hizo y que no se pudo comprobar."
     ),
 )
 
@@ -368,6 +369,36 @@ Start-Process -FilePath $als
 Write-Output $als
 '''
 
+# shortcut: Cmd+S y Cmd+Q por System Events (la primera vez macOS pide permiso de Accesibilidad para la terminal);
+# si quedan cambios sin guardar, el dialogo de Live frena el cierre y se avisa en vez de reintentar como en Windows.
+MAC_SAVE_QUIT = '''tell application "System Events" to tell (first application process whose name is "Live")
+  set frontmost to true
+  delay 0.5
+  keystroke "s" using command down
+  delay 3
+  keystroke "q" using command down
+end tell'''
+
+
+async def _reload_mac(project: str) -> str:
+    name = await asyncio.to_thread(_set_name)
+    if not name:
+        raise ToolError("No veo el nombre del set en la ventana de Live: guardalo con nombre (Cmd+S)")
+    als = os.path.join(project, name + ".als")
+    if not os.path.isfile(als):
+        raise ToolError("No encuentro %s : guarda el set con nombre en esa carpeta" % als)
+    r = await asyncio.to_thread(subprocess.run, ["osascript", "-e", MAC_SAVE_QUIT], capture_output=True, text=True)
+    if r.returncode:
+        raise ToolError("No pude guardar y cerrar Live (falta permiso de Accesibilidad?): %s" % r.stderr.strip())
+    for _ in range(90):
+        await asyncio.sleep(1)
+        if (await asyncio.to_thread(subprocess.run, ["pgrep", "-x", "Live"], capture_output=True)).returncode:
+            break
+    else:
+        raise ToolError("Live no se cerro en 90 s (hay un dialogo abierto?)")
+    await asyncio.to_thread(subprocess.run, ["open", als], check=True)
+    return als
+
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                       openWorldHint=False))
@@ -375,8 +406,6 @@ async def ableton_reload_set() -> dict:
     """Guarda el set, cierra Live y lo reabre para que suelte los wav recien grabados (Live los bloquea
     hasta cerrar el set; guardar no basta). Usalo despues de ableton_record_master y antes de medir.
     Tarda 30-120 s y Live desaparece un momento: avisa al usuario. Devuelve la ultima toma lista para medir."""
-    if os.name != "nt":
-        raise ToolError("ableton_reload_set solo funciona en Windows")
     rec = next((t for t in await call_live("list_tracks") if t["name"] == "Master Rec"), None)
     files = [c["file"] for c in await call_live("arrange_list", track=rec["ref"])] if rec else []
     files = [f for f in files if os.path.isfile(f)]
@@ -384,13 +413,17 @@ async def ableton_reload_set() -> dict:
         raise ToolError("No hay tomas en 'Master Rec': graba antes con ableton_record_master")
     take = max(files, key=os.path.getmtime)
     project = os.path.dirname(os.path.dirname(os.path.dirname(take)))  # <proyecto>\Samples\Recorded\toma.wav
-    proc = await asyncio.create_subprocess_exec(
-        "powershell", "-NoProfile", "-NonInteractive", "-Command",
-        "& {%s} '%s'" % (RELOAD_PS, project.replace("'", "''")),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    out, err = await asyncio.wait_for(proc.communicate(), 150)
-    if proc.returncode:
-        raise ToolError("No pude reabrir Live: %s" % err.decode(errors="replace").strip().splitlines()[0])
+    if MAC:
+        als = await _reload_mac(project)
+    else:
+        proc = await asyncio.create_subprocess_exec(
+            "powershell", "-NoProfile", "-NonInteractive", "-Command",
+            "& {%s} '%s'" % (RELOAD_PS, project.replace("'", "''")),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, err = await asyncio.wait_for(proc.communicate(), 150)
+        if proc.returncode:
+            raise ToolError("No pude reabrir Live: %s" % err.decode(errors="replace").strip().splitlines()[0])
+        als = out.decode(errors="replace").strip()
     for _ in range(90):  # Live tarda en cargar el set y el Remote Script
         await asyncio.sleep(2)
         try:
@@ -400,7 +433,7 @@ async def ableton_reload_set() -> dict:
             pass
     else:
         raise ToolError("Live se reabrio pero AbletonClaude no responde despues de 3 minutos")
-    return {"set": out.decode(errors="replace").strip(), "toma": take}
+    return {"set": als, "toma": take}
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
@@ -700,14 +733,19 @@ async def ableton_get_profile() -> dict:
 
 def _set_name() -> str | None:
     """Nombre del set abierto, del titulo de la ventana de Live ('Nombre* - Ableton Live 12 Suite').
-    None si Live esta cerrado, no es Windows o el set no tiene nombre todavia."""
-    if os.name != "nt":
-        return None  # shortcut: solo Windows lee el titulo; en Mac pasar nombre a mano
-    r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; (Get-Process 'Ableton Live 1*' "
-                        "-ErrorAction SilentlyContinue | ? MainWindowTitle | select -First 1).MainWindowTitle"],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace",
-                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    None si Live esta cerrado, no es Windows ni Mac o el set no tiene nombre todavia."""
+    if MAC:
+        r = subprocess.run(["osascript", "-e", 'tell application "System Events" to get name of front window of '
+                            '(first application process whose name is "Live")'],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+    elif os.name == "nt":
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                            "[Console]::OutputEncoding=[Text.Encoding]::UTF8; (Get-Process 'Ableton Live 1*' "
+                            "-ErrorAction SilentlyContinue | ? MainWindowTitle | select -First 1).MainWindowTitle"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    else:
+        return None
     name = r.stdout.strip().split(" - Ableton Live")[0].rstrip("*").strip()
     return None if name.lower() in ("", "untitled", "sin título", "sin titulo") else name
 
@@ -719,7 +757,7 @@ async def ableton_save_project(resumen: str, pendiente: str = "", nombre: str | 
     nombre, pide al usuario que lo guarde (Ctrl+S) o pasa uno. Reemplaza la nota anterior del mismo proyecto."""
     nombre = nombre or await asyncio.to_thread(_set_name)
     if not nombre:
-        raise ToolError("El set no tiene nombre: pide al usuario que lo guarde con Ctrl+S o pasa nombre")
+        raise ToolError("El set no tiene nombre: pide al usuario que lo guarde con Ctrl+S (Cmd+S en Mac) o pasa nombre")
     p = _load(PROFILE, {})
     projs = [x for x in p.get("proyectos", []) if x["nombre"].lower() != nombre.lower()]
     projs.append({"nombre": nombre, "fecha": time.strftime("%Y-%m-%d %H:%M"), "resumen": resumen, "pendiente": pendiente})

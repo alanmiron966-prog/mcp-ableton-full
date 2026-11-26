@@ -9,7 +9,7 @@ solo en 127.0.0.1:9877.
 
 ## Requisitos
 
-- Windows, Ableton Live 12
+- Windows o macOS, Ableton Live 12
 - [uv](https://docs.astral.sh/uv/) (instala Python 3.14 y las dependencias solo)
 - ffmpeg en el PATH (para medir audio)
 - Claude Code
@@ -20,6 +20,10 @@ solo en 127.0.0.1:9877.
 2. `python install.py` copia el Remote Script a tu User Library y registra el servidor `ableton` en Claude Code.
 3. Abre Live > Preferencias > Link, Tempo & MIDI > Control Surface: **AbletonClaude**.
 4. En Claude Code, `/mcp` debe mostrar `ableton` conectado.
+
+En Mac: la primera vez que Claude lea el nombre del set o lo recargue (`ableton_reload_set`), macOS pide permiso
+de Accesibilidad/Automatizacion para la terminal (Ajustes > Privacidad y seguridad). Los plugins se buscan en
+`/Library/Audio/Plug-Ins/VST3` y `~/Library/Audio/Plug-Ins/VST3`.
 
 ## Primer uso
 
@@ -32,7 +36,7 @@ solo en 127.0.0.1:9877.
 
 - Pedir una cancion entrega el proyecto completo: produccion en el Arrangement (un sonido por pista, secciones
   marcadas con `ableton_locators`), mezcla y master en el mismo set, medido contra tus referencias.
-  Guarda el set con nombre (Ctrl+S) antes de empezar: medir el master lo necesita.
+  Guarda el set con nombre (Ctrl+S, Cmd+S en Mac) antes de empezar: medir el master lo necesita.
 - **Mezcla en una orden**: escribe "mezcla mi track" (o usa el prompt `/mezclar`) y Claude ajusta niveles,
   EQ, bombeo con el kick, reverb/delay y paneo, y lo comprueba midiendo el master contra tu referencia.
 - Samples: escanea tus librerias y las busca por tipo (kick, clap, hat_closed...).

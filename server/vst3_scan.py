@@ -8,12 +8,32 @@ import sys
 import uuid
 
 HRESULT = ctypes.c_int32
+MAC = sys.platform == "darwin"
 
 
-def _iid(l1, l2, l3, l4):
+def _com_iid(l1, l2, l3, l4):
     # INLINE_UID con COM_COMPATIBLE (Windows): mismo orden de bytes que un GUID
     return (l1.to_bytes(4, "little") + (l2 >> 16).to_bytes(2, "little") + (l2 & 0xFFFF).to_bytes(2, "little")
             + l3.to_bytes(4, "big") + l4.to_bytes(4, "big"))
+
+
+def _iid(l1, l2, l3, l4):
+    # en Mac el SDK no es COM_COMPATIBLE: los 4 longs van en big endian
+    return b"".join(x.to_bytes(4, "big") for x in (l1, l2, l3, l4)) if MAC else _com_iid(l1, l2, l3, l4)
+
+
+def _to_com(cid):
+    """class id nativo -> orden Windows, para que cid_hex y uid_fields sean iguales en las dos plataformas."""
+    return _com_iid(*[int.from_bytes(cid[i:i + 4], "big") for i in (0, 4, 8, 12)]) if MAC else cid
+
+
+def _u16(p):
+    """String char16 (UTF-16) terminado en 0: en Mac c_wchar es de 4 bytes y wstring_at no sirve."""
+    p = ctypes.addressof(p) if isinstance(p, ctypes.Array) else p
+    a, n = ctypes.cast(p, ctypes.POINTER(ctypes.c_uint16)), 0
+    while a[n]:
+        n += 1
+    return ctypes.string_at(p, 2 * n).decode("utf-16-le")
 
 
 IID_COMPONENT = _iid(0xE831FF31, 0xF2D54301, 0x928EBBEE, 0x25697802)
@@ -35,8 +55,8 @@ IID_FACTORY2 = _iid(0x0007B650, 0xF24B4C0B, 0xA464EDB9, 0xF00B2ABB)
 
 
 class ParameterInfo(ctypes.Structure):
-    _fields_ = [("id", ctypes.c_uint32), ("title", ctypes.c_wchar * 128), ("shortTitle", ctypes.c_wchar * 128),
-                ("units", ctypes.c_wchar * 128), ("stepCount", ctypes.c_int32), ("default", ctypes.c_double),
+    _fields_ = [("id", ctypes.c_uint32), ("title", ctypes.c_uint16 * 128), ("shortTitle", ctypes.c_uint16 * 128),
+                ("units", ctypes.c_uint16 * 128), ("stepCount", ctypes.c_int32), ("default", ctypes.c_double),
                 ("unitId", ctypes.c_int32), ("flags", ctypes.c_int32)]
 
 
@@ -91,7 +111,7 @@ def _attr_list():
         return 0
 
     def set_str(this, k, src):
-        d[k] = ctypes.wstring_at(src)
+        d[k] = _u16(src)
         return 0
 
     def get_str(this, k, dst, size):
@@ -226,20 +246,41 @@ def _qi(obj, iid):
 
 
 def dll_path(path):
-    if os.path.isdir(path):  # bundle: X.vst3/Contents/x86_64-win/X.vst3
-        hits = glob.glob(os.path.join(path, "Contents", "x86_64-win", "*.vst3"))
+    if os.path.isdir(path):  # bundle: X.vst3/Contents/x86_64-win/X.vst3 (Windows) o X.vst3/Contents/MacOS/X (Mac)
+        hits = glob.glob(os.path.join(path, "Contents", "MacOS", "*") if MAC else
+                         os.path.join(path, "Contents", "x86_64-win", "*.vst3"))
         if not hits:
             raise FileNotFoundError("bundle sin binario x64: %s" % path)
         return hits[0]
     return path
 
 
+def _bundle_entry(lib, path):
+    """En Mac el SDK exige bundleEntry(CFBundleRef) antes de GetPluginFactory."""
+    cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    cf.CFURLCreateFromFileSystemRepresentation.restype = ctypes.c_void_p
+    cf.CFURLCreateFromFileSystemRepresentation.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_bool]
+    cf.CFBundleCreate.restype = ctypes.c_void_p
+    cf.CFBundleCreate.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    raw = os.fsencode(path)
+    bundle = cf.CFBundleCreate(None, cf.CFURLCreateFromFileSystemRepresentation(None, raw, len(raw), True))
+    entry = getattr(lib, "bundleEntry", None)
+    if entry is not None:
+        entry.argtypes, entry.restype = [ctypes.c_void_p], ctypes.c_bool
+        if not entry(bundle):
+            raise RuntimeError("bundleEntry fallo: %s" % path)
+
+
 def scan(path):
     global HOST
     HOST = HOST or _make_host()
-    lib = ctypes.WinDLL(dll_path(path))
-    if hasattr(lib, "InitDll"):
-        lib.InitDll()
+    if MAC:
+        lib = ctypes.CDLL(dll_path(path))
+        _bundle_entry(lib, path)
+    else:
+        lib = ctypes.WinDLL(dll_path(path))
+        if hasattr(lib, "InitDll"):
+            lib.InitDll()
     get_factory = lib.GetPluginFactory
     get_factory.restype = ctypes.c_void_p
     factory = ctypes.c_void_p(get_factory())
@@ -286,11 +327,11 @@ def scan(path):
                 _call(ctrl, 9, HRESULT, ctypes.c_int32(j), ctypes.byref(p))
                 plain = [_call(ctrl, 12, ctypes.c_double, ctypes.c_uint32(p.id), ctypes.c_double(v))
                          for v in (0.0, 1.0, p.default)]  # normalizedParamToPlain
-                params.append({"id": p.id, "name": p.title, "units": p.units, "steps": p.stepCount,
+                params.append({"id": p.id, "name": _u16(p.title), "units": _u16(p.units), "steps": p.stepCount,
                                "flags": p.flags, "default_norm": p.default,
                                "min": plain[0], "max": plain[1], "default": plain[2]})
-        out.append({"name": info.name.decode("utf-8", "replace"), "cid": str(uuid.UUID(bytes_le=cid)),
-                    "cid_hex": cid.hex(), "sub": sub, "params": params,
+        out.append({"name": info.name.decode("utf-8", "replace"), "cid": str(uuid.UUID(bytes_le=_to_com(cid))),
+                    "cid_hex": _to_com(cid).hex(), "sub": sub, "params": params,
                     # estado por defecto que el propio plugin genera: Live lo guarda tal cual en hex
                     "processor_state": _get_state(comp, 13).hex().upper(),
                     "controller_state": _get_state(ctrl, 7).hex().upper() if ctrl is not None else ""})

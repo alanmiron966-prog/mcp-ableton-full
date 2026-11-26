@@ -10,7 +10,8 @@ import sys
 import livepaths
 import preset_gen
 
-VST3_DIR = r"C:\Program Files\Common Files\VST3"
+VST3_DIRS = (["/Library/Audio/Plug-Ins/VST3", os.path.expanduser("~/Library/Audio/Plug-Ins/VST3")]
+             if sys.platform == "darwin" else [r"C:\Program Files\Common Files\VST3"])
 REPORT = os.path.join(os.path.expanduser("~"), ".ableton-mcp", "plugins.json")
 OUT_DIR = os.environ.get("ABLETON_CLAUDE_PRESETS",
                          os.path.join(livepaths.user_library() or os.path.dirname(REPORT), "Claude Presets"))
@@ -33,8 +34,8 @@ def safe_name(name):
     return re.sub(r'[<>:"/\\|?*]', "_", name).strip(" .")
 
 
-def main(vst3_dir=VST3_DIR, out_dir=OUT_DIR, only_failed=False):
-    report, paths = [], sorted(find_plugins(vst3_dir))
+def main(vst3_dir=None, out_dir=OUT_DIR, only_failed=False):
+    report, paths = [], sorted(p for d in ([vst3_dir] if vst3_dir else VST3_DIRS) for p in find_plugins(d))
     if only_failed and os.path.exists(REPORT):
         with open(REPORT, encoding="utf-8") as f:
             old = json.load(f)
